@@ -96,10 +96,15 @@ export default function ConfigScreen({ onStart, onShowTuto }: ConfigScreenProps)
       <div className="max-w-lg w-full">
         <div className="text-center mb-6">
           <div className="text-5xl mb-3">🌕</div>
-          <h2 className="font-display text-xl mb-1" style={{ color: "#d4a843" }}>
-            Configuration de la partie
-          </h2>
-          <p className="text-gray-500 text-sm">Choisis ta composition</p>
+          <h1 className="font-display text-3xl tracking-widest mb-2" style={{ color: "#d4a843" }}>
+            LYCANA
+          </h1>
+          <p className="text-gray-400 text-sm mb-1">
+            Joue au Loup-Garou. Seul. Quand tu veux.
+          </p>
+          <p className="text-gray-600 text-xs">
+            8 à 15 joueurs. Bluff, déduction, survie.
+          </p>
         </div>
 
         {/* Human name */}

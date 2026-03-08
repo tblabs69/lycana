@@ -15,8 +15,8 @@ const sourceSans = Source_Sans_3({
 });
 
 export const metadata: Metadata = {
-  title: "Lycana — Loup-Garou avec IA",
-  description: "Une partie de Loup-Garou où chaque PNJ est propulsé par Claude.",
+  title: "Lycana — Loup-Garou solo",
+  description: "Le Loup-Garou solo. Bluff, déduction et trahison entre 8 et 15 joueurs.",
 };
 
 export default function RootLayout({

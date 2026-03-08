@@ -55,7 +55,7 @@ export default function TutoModal({ open, onClose }: TutoModalProps) {
           <Section title="Le principe">
             <P>Lycana, c&apos;est un village où tout le monde se connaît. Sauf que la nuit, des loups-garous dévorent un habitant. Le matin, le village se réveille avec un mort de plus et pas l&apos;ombre d&apos;un indice.</P>
             <P>Ton job : comprendre qui ment, qui dit vrai, et voter pour éliminer les loups avant qu&apos;ils ne vous bouffent tous.</P>
-            <P>Tu joues avec des personnages pilotés par l&apos;IA. Ils ont des personnalités, des stratégies, et surtout — ils mentent très bien.</P>
+            <P>Tu joues avec des personnages aux personnalités uniques. Ils ont des stratégies, des habitudes, et surtout — ils mentent très bien.</P>
           </Section>
 
           {/* ── Comment ça se passe ── */}

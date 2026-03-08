@@ -4,7 +4,7 @@ import { buildSystemPrompt } from "@/lib/prompts";
 import { buildHunterContext } from "@/lib/context-builder";
 import { callClaude, MODELS, TEMPERATURES } from "@/lib/anthropic";
 import { findPlayer, parseName } from "@/lib/game-engine";
-import { applyRateLimit, extractByokKey } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, validatePlayerName, safeErrorMessage } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const limited = applyRateLimit(req);
@@ -13,6 +13,10 @@ export async function POST(req: NextRequest) {
   try {
     const body: HunterRequest = await req.json();
     const { hunter, players, messages, history, cycle } = body;
+
+    if (!validatePlayerName(hunter?.name)) {
+      return NextResponse.json({ target: "" }, { status: 400 });
+    }
 
     const systemPrompt = buildSystemPrompt(hunter, players);
     const userMessage = buildHunterContext(hunter, players, messages, history, cycle);
@@ -49,7 +53,7 @@ export async function POST(req: NextRequest) {
     if (byokKey && err instanceof Error && (err.message?.includes("401") || err.message?.includes("auth") || err.message?.includes("API key"))) {
       return NextResponse.json({ target: "", byokError: "Clé API invalide. Vérifie-la sur console.anthropic.com" }, { status: 401 });
     }
-    console.error("[/api/hunter]", err);
+    console.error("[/api/hunter]", safeErrorMessage(err));
     return NextResponse.json({ target: "" }, { status: 500 });
   }
 }

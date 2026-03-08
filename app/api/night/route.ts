@@ -12,7 +12,7 @@ import {
 import { callClaude, MODELS, TEMPERATURES } from "@/lib/anthropic";
 import { findPlayer, parseName, parseWitchAction, isWolfRole } from "@/lib/game-engine";
 import { debugLog } from "@/lib/debug";
-import { applyRateLimit, extractByokKey } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, safeErrorMessage } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const limited = applyRateLimit(req);
@@ -256,7 +256,7 @@ export async function POST(req: NextRequest) {
     if (byokKey && err instanceof Error && (err.message?.includes("401") || err.message?.includes("auth") || err.message?.includes("API key"))) {
       return NextResponse.json({ wolfTarget: null, seerTarget: null, seerResult: null, witchAction: null, byokError: "Clé API invalide. Vérifie-la sur console.anthropic.com" }, { status: 401 });
     }
-    console.error("[/api/night]", err);
+    console.error("[/api/night]", safeErrorMessage(err));
     return NextResponse.json(
       { wolfTarget: null, seerTarget: null, seerResult: null, witchAction: null },
       { status: 500 }

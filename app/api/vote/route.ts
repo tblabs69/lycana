@@ -5,7 +5,7 @@ import { buildVoteContext } from "@/lib/context-builder";
 import { callClaude, MODELS, TEMPERATURES } from "@/lib/anthropic";
 import { parseName, isWolfRole } from "@/lib/game-engine";
 import { debugLog } from "@/lib/debug";
-import { applyRateLimit, extractByokKey } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, validatePlayerName, safeErrorMessage } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const limited = applyRateLimit(req);
@@ -14,6 +14,10 @@ export async function POST(req: NextRequest) {
   try {
     const body: VoteRequest = await req.json();
     const { player, players, messages, cycle, contrarian, lovers } = body;
+
+    if (!validatePlayerName(player?.name)) {
+      return NextResponse.json({ target: "", reason: "" }, { status: 400 });
+    }
 
     const systemPrompt = buildSystemPrompt(player, players);
     const userMessage = buildVoteContext(player, players, messages, cycle, contrarian, lovers);
@@ -61,7 +65,7 @@ export async function POST(req: NextRequest) {
     if (byokKey && err instanceof Error && (err.message?.includes("401") || err.message?.includes("auth") || err.message?.includes("API key"))) {
       return NextResponse.json({ target: "", reason: "", byokError: "Clé API invalide. Vérifie-la sur console.anthropic.com" }, { status: 401 });
     }
-    console.error("[/api/vote]", err);
+    console.error("[/api/vote]", safeErrorMessage(err));
     return NextResponse.json({ target: "", reason: "" }, { status: 500 });
   }
 }

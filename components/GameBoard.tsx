@@ -102,6 +102,7 @@ export default function GameBoard() {
   const [byokError, setByokError] = useState<string | null>(null);
   const [debugMode, setDebugMode] = useState(false);
   useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
     const params = new URLSearchParams(window.location.search);
     setDebugMode(params.get("debug") === "true");
   }, []);

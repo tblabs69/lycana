@@ -4,7 +4,7 @@ import { NARRATOR_PROMPT } from "@/lib/prompts";
 import { buildNarratorContext } from "@/lib/context-builder";
 import { callClaude, MODELS, TEMPERATURES } from "@/lib/anthropic";
 import { debugWarn } from "@/lib/debug";
-import { applyRateLimit, extractByokKey } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, safeErrorMessage } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const limited = applyRateLimit(req);
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     if (byokKey && err instanceof Error && (err.message?.includes("401") || err.message?.includes("auth") || err.message?.includes("API key"))) {
       return NextResponse.json({ text: "", byokError: "Clé API invalide. Vérifie-la sur console.anthropic.com" }, { status: 401 });
     }
-    console.error("[/api/narrator]", err);
+    console.error("[/api/narrator]", safeErrorMessage(err));
     return NextResponse.json<NarratorResponse>({ text: "" }, { status: 500 });
   }
 }

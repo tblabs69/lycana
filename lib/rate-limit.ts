@@ -42,7 +42,26 @@ function checkRateLimit(ip: string): { allowed: boolean; remaining: number } {
 /** Extract BYOK key from request header — never log it */
 export function extractByokKey(req: NextRequest): string | undefined {
   const key = req.headers.get("x-api-key");
-  return key && key.startsWith("sk-") ? key : undefined;
+  return key && /^sk-ant-[a-zA-Z0-9_-]{20,}$/.test(key) ? key : undefined;
+}
+
+/** Validate player name: unicode letters/numbers/spaces/hyphens/apostrophes, max 20 chars */
+const VALID_NAME = /^[\p{L}\p{N}\s'-]{1,20}$/u;
+
+export function validatePlayerName(name: unknown): string | null {
+  if (typeof name !== "string") return null;
+  const trimmed = name.trim();
+  return VALID_NAME.test(trimmed) ? trimmed : null;
+}
+
+/** Sanitize error for logging — strip API keys and stack traces */
+export function safeErrorMessage(err: unknown): string {
+  if (err instanceof Error) {
+    const msg = (err.message || "Unknown error").replace(/sk-ant-[a-zA-Z0-9_-]+/g, "[REDACTED]");
+    const status = (err as { status?: number }).status;
+    return status ? `${status}: ${msg}` : msg;
+  }
+  return "Unknown error";
 }
 
 /** Returns a 429 response if rate limited, or null if OK */

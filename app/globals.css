@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-display: var(--font-cinzel);
+  --font-sans: var(--font-source-sans);
+}
+
+* {
+  font-family: var(--font-source-sans), "Source Sans 3", sans-serif;
+}
+
+.font-display {
+  font-family: var(--font-cinzel), "Cinzel", serif;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ffffff15;
+  border-radius: 3px;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-up {
+  animation: fadeUp 0.4s ease forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s ease forwards;
+}
+
+/* E5: Hide scrollbar for horizontal scroll */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* E4: Glow pulse for human turn */
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(212, 168, 67, 0.15), inset 0 0 8px rgba(212, 168, 67, 0.05); }
+  50% { box-shadow: 0 0 20px rgba(212, 168, 67, 0.3), 0 0 40px rgba(212, 168, 67, 0.08), inset 0 0 12px rgba(212, 168, 67, 0.08); }
+}
+
+.glow-pulse {
+  animation: glowPulse 2s ease-in-out infinite;
+  border-color: rgba(212, 168, 67, 0.25) !important;
+}
+
+/* B1: Card flip for role reveal ceremony */
+.card-perspective {
+  perspective: 1000px;
+}
+
+.card-inner {
+  transform-style: preserve-3d;
+  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-inner.flipped {
+  transform: rotateY(180deg);
+}
+
+.card-face {
+  backface-visibility: hidden;
+  position: absolute;
+  inset: 0;
+}
+
+.card-back-face {
+  transform: rotateY(180deg);
+}
+
+/* Floating particles */
+@keyframes float {
+  0%, 100% { transform: translateY(0) translateX(0); opacity: 0.3; }
+  25% { transform: translateY(-20px) translateX(5px); opacity: 0.6; }
+  50% { transform: translateY(-10px) translateX(-5px); opacity: 0.4; }
+  75% { transform: translateY(-25px) translateX(3px); opacity: 0.5; }
+}
+
+/* Card hover float */
+@keyframes cardFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}

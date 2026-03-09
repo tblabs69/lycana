@@ -6,7 +6,7 @@ import { TEMPERATURES } from "@/lib/providers";
 import { cleanResponse } from "@/lib/anthropic";
 import { isFeminine, isWolfRole } from "@/lib/game-engine";
 import { debugLog } from "@/lib/debug";
-import { applyRateLimit, extractByokKey, extractProvider, validatePlayerName, safeErrorMessage, logRouteInfo, isAuthError } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, extractProvider, validatePlayerName, safeErrorMessage, logRouteInfo, isAuthError, requireApiKey } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const limited = applyRateLimit(req);
@@ -15,6 +15,8 @@ export async function POST(req: NextRequest) {
   const provider = extractProvider(req, byokKey);
   const apiKey = byokKey || process.env[provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY"] || "";
   logRouteInfo("/api/love-chat", provider, apiKey, req);
+  const noKey = requireApiKey(apiKey, byokKey);
+  if (noKey) return noKey;
   try {
     const body: LoveChatRequest = await req.json();
     const { player, partnerName, humanMessage, lovers, cycle } = body;

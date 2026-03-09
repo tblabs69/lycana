@@ -101,6 +101,24 @@ export function isAuthError(err: unknown): boolean {
   return false;
 }
 
+/** Guard: reject early if no API key is available (BYOK missing + no env key) */
+export function requireApiKey(apiKey: string, byokKey: string | undefined): NextResponse | null {
+  if (apiKey && apiKey.length > 0) return null; // key exists, proceed
+  // No key at all — return 401 before calling LLM
+  if (byokKey === undefined) {
+    // BYOK header was absent or rejected by extractByokKey
+    return NextResponse.json(
+      { error: "Clé API requise.", byokError: "Clé API requise." },
+      { status: 401 }
+    );
+  }
+  // byokKey was set but somehow apiKey is still empty (shouldn't happen)
+  return NextResponse.json(
+    { error: "Clé API invalide.", byokError: "Clé API invalide." },
+    { status: 401 }
+  );
+}
+
 /** Returns a 429 response if rate limited, or null if OK */
 export function applyRateLimit(req: NextRequest): NextResponse | null {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()

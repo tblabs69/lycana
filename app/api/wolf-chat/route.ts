@@ -6,7 +6,7 @@ import { TEMPERATURES } from "@/lib/providers";
 import { cleanResponse } from "@/lib/anthropic";
 import { isWolfRole } from "@/lib/game-engine";
 import { debugLog } from "@/lib/debug";
-import { applyRateLimit, extractByokKey, extractProvider, safeErrorMessage, logRouteInfo, isAuthError } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, extractProvider, safeErrorMessage, logRouteInfo, isAuthError, requireApiKey } from "@/lib/rate-limit";
 
 interface WolfChatRequest {
   wolf: Player;
@@ -24,6 +24,8 @@ export async function POST(req: NextRequest) {
   const provider = extractProvider(req, byokKey);
   const apiKey = byokKey || process.env[provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY"] || "";
   logRouteInfo("/api/wolf-chat", provider, apiKey, req);
+  const noKey = requireApiKey(apiKey, byokKey);
+  if (noKey) return noKey;
   try {
     const body: WolfChatRequest = await req.json();
     const { wolf, players, cycle, humanMessage, chatHistory, lovers } = body;

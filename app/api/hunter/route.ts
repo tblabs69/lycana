@@ -5,7 +5,7 @@ import { buildHunterContext } from "@/lib/context-builder";
 import { callLLM } from "@/lib/llm";
 import { TEMPERATURES } from "@/lib/providers";
 import { findPlayer, parseName } from "@/lib/game-engine";
-import { applyRateLimit, extractByokKey, extractProvider, validatePlayerName, safeErrorMessage } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, extractProvider, validatePlayerName, safeErrorMessage, logRouteInfo } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const limited = applyRateLimit(req);
@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
   const byokKey = extractByokKey(req);
   const provider = extractProvider(req, byokKey);
   const apiKey = byokKey || process.env[provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY"] || "";
+  logRouteInfo("/api/hunter", provider, apiKey, req);
   try {
     const body: HunterRequest = await req.json();
     const { hunter, players, messages, history, cycle } = body;

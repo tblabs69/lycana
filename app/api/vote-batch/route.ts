@@ -5,7 +5,7 @@ import { TEMPERATURES } from "@/lib/providers";
 import { VOTE_BATCH_SYSTEM_PROMPT } from "@/lib/prompts";
 import { isWolfRole } from "@/lib/game-engine";
 import { debugLog } from "@/lib/debug";
-import { applyRateLimit, extractByokKey, extractProvider, safeErrorMessage } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, extractProvider, safeErrorMessage, logRouteInfo } from "@/lib/rate-limit";
 
 interface BatchVoteRequest {
   voters: { name: string; archetype: string; role: Role; contrarian?: boolean }[];
@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
   const byokKey = extractByokKey(req);
   const provider = extractProvider(req, byokKey);
   const apiKey = byokKey || process.env[provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY"] || "";
+  logRouteInfo("/api/vote-batch", provider, apiKey, req);
   try {
     const body: BatchVoteRequest = await req.json();
     const { voters, players, messages, cycle, lovers } = body;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Provider } from "@/lib/providers";
 import { detectProvider } from "@/lib/providers";
+import { debugLog } from "@/lib/debug";
 
 /** Simple in-memory rate limiter per IP — 60 req/min */
 
@@ -45,9 +46,10 @@ function checkRateLimit(ip: string): { allowed: boolean; remaining: number } {
 export function extractByokKey(req: NextRequest): string | undefined {
   const key = req.headers.get("x-api-key");
   if (!key) return undefined;
-  // Anthropic: sk-ant-... or OpenAI: sk-...
+  // Anthropic: sk-ant-... (strict charset)
   if (/^sk-ant-[a-zA-Z0-9_-]{20,}$/.test(key)) return key;
-  if (/^sk-[a-zA-Z0-9_-]{20,}$/.test(key)) return key;
+  // OpenAI: sk- (not sk-ant-), at least 20 chars, no charset restriction (format changes often)
+  if (key.startsWith("sk-") && !key.startsWith("sk-ant-") && key.length >= 20) return key;
   return undefined;
 }
 
@@ -79,6 +81,11 @@ export function safeErrorMessage(err: unknown): string {
     return status ? `${status}: ${msg}` : msg;
   }
   return "Unknown error";
+}
+
+/** Log route info in dev — provider, key prefix, header presence */
+export function logRouteInfo(route: string, provider: Provider, apiKey: string, req: NextRequest) {
+  debugLog(`[${route}] Provider: ${provider} | Key prefix: ${apiKey?.substring(0, 7) || "NONE"} | x-provider header: ${req.headers.get("x-provider") || "MISSING"} | x-api-key present: ${!!req.headers.get("x-api-key")}`);
 }
 
 /** Returns a 429 response if rate limited, or null if OK */

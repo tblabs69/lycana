@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { JournalEntry } from "@/types/game";
 import { callLLM } from "@/lib/llm";
 import { parseJournalEntry } from "@/lib/journal";
-import { applyRateLimit, extractByokKey, extractProvider, safeErrorMessage } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, extractProvider, safeErrorMessage, logRouteInfo } from "@/lib/rate-limit";
 
 interface JournalBatchRequest {
   updates: {
@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
   const byokKey = extractByokKey(req);
   const provider = extractProvider(req, byokKey);
   const apiKey = byokKey || process.env[provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY"] || "";
+  logRouteInfo("/api/journal-update", provider, apiKey, req);
   try {
     const body: JournalBatchRequest = await req.json();
     const { updates } = body;

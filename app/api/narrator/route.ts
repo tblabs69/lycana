@@ -5,7 +5,7 @@ import { buildNarratorContext } from "@/lib/context-builder";
 import { callLLM } from "@/lib/llm";
 import { TEMPERATURES } from "@/lib/providers";
 import { debugWarn } from "@/lib/debug";
-import { applyRateLimit, extractByokKey, extractProvider, safeErrorMessage } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, extractProvider, safeErrorMessage, logRouteInfo } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const limited = applyRateLimit(req);
@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
   const byokKey = extractByokKey(req);
   const provider = extractProvider(req, byokKey);
   const apiKey = byokKey || process.env[provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY"] || "";
+  logRouteInfo("/api/narrator", provider, apiKey, req);
   try {
     const body: NarratorRequest = await req.json();
     const { transition, cycle, players, context } = body;

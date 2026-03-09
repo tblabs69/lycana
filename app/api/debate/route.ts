@@ -6,7 +6,7 @@ import { callLLM } from "@/lib/llm";
 import { TEMPERATURES } from "@/lib/providers";
 import { cleanResponse } from "@/lib/anthropic";
 import { isWolfRole } from "@/lib/game-engine";
-import { applyRateLimit, extractByokKey, extractProvider, validatePlayerName, safeErrorMessage } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, extractProvider, validatePlayerName, safeErrorMessage, logRouteInfo } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const limited = applyRateLimit(req);
@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
   const byokKey = extractByokKey(req);
   const provider = extractProvider(req, byokKey);
   const apiKey = byokKey || process.env[provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY"] || "";
+  logRouteInfo("/api/debate", provider, apiKey, req);
   try {
     const body: DebateRequest = await req.json();
     const { player, players, messages, cycle, round, nightResult, history, seerLog, lovers, directive, notableAccusations } = body;

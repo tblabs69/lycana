@@ -6,7 +6,7 @@ import { callLLM } from "@/lib/llm";
 import { TEMPERATURES } from "@/lib/providers";
 import { parseName, isWolfRole } from "@/lib/game-engine";
 import { debugLog } from "@/lib/debug";
-import { applyRateLimit, extractByokKey, extractProvider, validatePlayerName, safeErrorMessage } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, extractProvider, validatePlayerName, safeErrorMessage, logRouteInfo } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const limited = applyRateLimit(req);
@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
   const byokKey = extractByokKey(req);
   const provider = extractProvider(req, byokKey);
   const apiKey = byokKey || process.env[provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY"] || "";
+  logRouteInfo("/api/vote", provider, apiKey, req);
   try {
     const body: VoteRequest = await req.json();
     const { player, players, messages, cycle, contrarian, lovers } = body;

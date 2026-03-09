@@ -44,13 +44,15 @@ function checkRateLimit(ip: string): { allowed: boolean; remaining: number } {
 
 /** Extract BYOK key from request header — never log it. Accepts both Anthropic (sk-ant-) and OpenAI (sk-) keys */
 export function extractByokKey(req: NextRequest): string | undefined {
-  const key = req.headers.get("x-api-key");
+  const key = req.headers.get("x-api-key")?.trim();
   if (!key) return undefined;
+  let result: string | undefined;
   // Anthropic: sk-ant-... (strict charset)
-  if (/^sk-ant-[a-zA-Z0-9_-]{20,}$/.test(key)) return key;
+  if (/^sk-ant-[a-zA-Z0-9_-]{20,}$/.test(key)) result = key;
   // OpenAI: sk- (not sk-ant-), at least 20 chars, no charset restriction (format changes often)
-  if (key.startsWith("sk-") && !key.startsWith("sk-ant-") && key.length >= 20) return key;
-  return undefined;
+  else if (key.startsWith("sk-") && !key.startsWith("sk-ant-") && key.length >= 20) result = key;
+  debugLog(`[BYOK] prefix: ${key?.substring(0, 10)} | length: ${key?.length} | passed: ${!!result}`);
+  return result;
 }
 
 /** Extract provider from request — header > key detection > default */

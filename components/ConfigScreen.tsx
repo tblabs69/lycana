@@ -17,24 +17,26 @@ export default function ConfigScreen({ onStart, onShowTuto }: ConfigScreenProps)
   const [preset, setPreset] = useState<string>("classique");
   const [showCustom, setShowCustom] = useState(false);
   const [humanName, setHumanName] = useState("");
-  const [byokKey, setByokKey] = useState(() => {
-    if (typeof window !== "undefined") {
-      return sessionStorage.getItem("lycana_byok") || "";
-    }
-    return "";
-  });
+  const [byokKey, setByokKey] = useState("");
+
+  // Hydrate from sessionStorage after mount (avoids React #418)
+  useEffect(() => {
+    const stored = sessionStorage.getItem("lycana_byok");
+    if (stored) setByokKey(stored);
+  }, []);
   const [showByokPassword, setShowByokPassword] = useState(false);
   const [showByokDetails, setShowByokDetails] = useState(false);
   const [byokValidated, setByokValidated] = useState(false);
   const [byokValidating, setByokValidating] = useState(false);
   const [byokToast, setByokToast] = useState(false);
   const byokInputRef = useRef<HTMLInputElement>(null);
-  const [provider, setProvider] = useState<"anthropic" | "openai">(() => {
-    if (typeof window !== "undefined") {
-      return (sessionStorage.getItem("lycana_provider") as "anthropic" | "openai") || "anthropic";
-    }
-    return "anthropic";
-  });
+  const [provider, setProvider] = useState<"anthropic" | "openai">("anthropic");
+
+  // Hydrate provider from sessionStorage after mount (avoids React #418)
+  useEffect(() => {
+    const stored = sessionStorage.getItem("lycana_provider") as "anthropic" | "openai" | null;
+    if (stored === "openai" || stored === "anthropic") setProvider(stored);
+  }, []);
 
   const wolfCount = getWolfCount(playerCount);
 

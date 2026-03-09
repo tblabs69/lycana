@@ -199,9 +199,10 @@ export default function GameBoard() {
   /** Build headers for API calls — includes BYOK key and provider if active */
   function apiHeaders(): Record<string, string> {
     const h: Record<string, string> = { "Content-Type": "application/json" };
-    const key = byokKey || sessionStorage.getItem("lycana_byok");
+    // Always read from sessionStorage (source of truth) — React state may lag behind
+    const key = sessionStorage.getItem("lycana_byok")?.trim();
     if (key) h["x-api-key"] = key;
-    const prov = provider || sessionStorage.getItem("lycana_provider") || "anthropic";
+    const prov = sessionStorage.getItem("lycana_provider") || provider || "anthropic";
     h["x-provider"] = prov;
     return h;
   }

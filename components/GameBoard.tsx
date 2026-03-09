@@ -27,6 +27,7 @@ import type {
   LoveChatRequest,
   LoveChatResponse,
   NotableAccusation,
+  JournalEntry,
 } from "@/types/game";
 import {
   getInitialPlayers,
@@ -41,6 +42,14 @@ import {
   roleEmoji,
 } from "@/lib/game-engine";
 import { assignDirectives, getSkipMessage, getGroupSkipMessage, selectSpeakers, isPassDirective, getPassMessage, detectNotableAccusations } from "@/lib/context-builder";
+import {
+  buildJournalSystemPrompt,
+  buildJournalUserMessage,
+  buildDawnRecap,
+  buildDebateRecap,
+  buildVoteRecap,
+  buildNightRecap,
+} from "@/lib/journal";
 import PlayerBar from "@/components/PlayerBar";
 import ChatFeed from "@/components/ChatFeed";
 import InputArea from "@/components/InputArea";
@@ -100,6 +109,7 @@ export default function GameBoard() {
 
   const [byokKey, setByokKey] = useState<string | null>(null);
   const [byokError, setByokError] = useState<string | null>(null);
+  const [provider, setProvider] = useState<"anthropic" | "openai">("anthropic");
   const [debugMode, setDebugMode] = useState(false);
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
@@ -186,11 +196,13 @@ export default function GameBoard() {
 
   // ── API HELPERS ──────────────────────────────────────────────────────────
 
-  /** Build headers for API calls — includes BYOK key if active */
+  /** Build headers for API calls — includes BYOK key and provider if active */
   function apiHeaders(): Record<string, string> {
     const h: Record<string, string> = { "Content-Type": "application/json" };
     const key = byokKey || sessionStorage.getItem("lycana_byok");
     if (key) h["x-api-key"] = key;
+    const prov = provider || sessionStorage.getItem("lycana_provider") || "anthropic";
+    h["x-provider"] = prov;
     return h;
   }
 
@@ -286,6 +298,58 @@ export default function GameBoard() {
     };
     const res = await apiFetch("/api/love-chat", body);
     return res.json();
+  }
+
+  // ── JOURNAL UPDATE ─────────────────────────────────────────────────────────
+
+  /** Update internal journals for all alive AI players after a phase.
+   *  Runs in parallel via a single batch API call.
+   *  Returns updated players array with new journal entries. */
+  async function updateJournals(
+    currentPlayers: Player[],
+    phaseDescription: string,
+    phaseSummary: string,
+    phase: string,
+  ): Promise<Player[]> {
+    const aliveAIs = currentPlayers.filter((p) => p.alive && !p.isHuman);
+    if (aliveAIs.length === 0) return currentPlayers;
+
+    const updates = aliveAIs.map((p) => {
+      const journal = p.internalJournal || [];
+      return {
+        playerName: p.name,
+        role: p.role,
+        gender: p.gender,
+        systemPrompt: buildJournalSystemPrompt(p),
+        userMessage: buildJournalUserMessage(p.name, journal, phaseDescription, phaseSummary, currentPlayers),
+        phase,
+      };
+    });
+
+    try {
+      const res = await apiFetch("/api/journal-update", { updates });
+      const data = await res.json();
+      if (!data.entries || data.entries.length === 0) return currentPlayers;
+
+      // Merge new entries into players
+      const entryMap = new Map<string, JournalEntry>();
+      for (const e of data.entries) {
+        entryMap.set(e.playerName, e.entry);
+      }
+
+      const updatedPlayers = currentPlayers.map((p) => {
+        const newEntry = entryMap.get(p.name);
+        if (!newEntry) return p;
+        const journal = [...(p.internalJournal || []), newEntry];
+        return { ...p, internalJournal: journal };
+      });
+
+      debugLog(`[JOURNAL] Updated ${data.entries.length} journals for phase: ${phase}`);
+      return updatedPlayers;
+    } catch (err) {
+      console.error("[JOURNAL] Update failed:", err);
+      return currentPlayers; // Non-fatal — game continues without journal update
+    }
   }
 
   // ── NIGHT PHASE ───────────────────────────────────────────────────────────
@@ -810,6 +874,13 @@ export default function GameBoard() {
       return;
     }
 
+    // JOURNAL UPDATE: after dawn — all alive AIs observe night results
+    if (nResult) {
+      const dawnRecap = buildDawnRecap(cy, nResult, up, seerLog, potions, lovers);
+      up = await updateJournals(up, `Aube du jour ${cy}`, dawnRecap, `aube-${cy}`);
+      setPlayers(up);
+    }
+
     // Narrator: debate start
     const nightDeaths = up.filter((p) => !p.alive && players.find((pp) => pp.name === p.name)?.alive).map((d) => d.name);
     const debateNarration = await callNarrator("debateStart", cy, up,
@@ -886,6 +957,13 @@ export default function GameBoard() {
           setPhase("debate");
           busy.current = false;
           return;
+        }
+
+        // JOURNAL UPDATE: after debate round 2 — all AIs heard both rounds
+        {
+          const debateR2Recap = buildDebateRecap(cycle, 2, messages, players, "");
+          const updatedPlayers = await updateJournals(players, `Jour ${cycle}, Tour 2`, debateR2Recap, `jour-${cycle}-tour2`);
+          setPlayers(updatedPlayers);
         }
 
         // Detect notable accusations from this cycle's debate
@@ -1104,6 +1182,14 @@ export default function GameBoard() {
       addMsg(tieNarration, true, { cycle });
       const tieEntry: HistoryEntry = { cycle, nightDeaths: (nResult?.deaths ?? []).map((d) => d.name), nightDeath: nResult?.deaths?.[0]?.name ?? null, voteDeath: null, voteRole: null, hunterDeath: null };
       setHistory((prev) => [...prev, tieEntry]);
+
+      // JOURNAL UPDATE: after tie vote
+      {
+        const tieVoteRecap = buildVoteRecap(cycle, null, null, allReveals, true);
+        const updatedPs = await updateJournals(currentPlayers, `Vote du jour ${cycle}`, tieVoteRecap, `vote-${cycle}`);
+        setPlayers(updatedPs);
+      }
+
       await waitForNext();
       goNext(currentPlayers, tieEntry);
       return;
@@ -1238,6 +1324,19 @@ export default function GameBoard() {
       );
     }
 
+    // JOURNAL UPDATE: after vote — all AIs learn who was eliminated
+    {
+      const voteRecap = buildVoteRecap(
+        cycle,
+        eliminated,
+        ep?.role ?? null,
+        allReveals,
+        false,
+      );
+      up = await updateJournals(up, `Vote du jour ${cycle}`, voteRecap, `vote-${cycle}`);
+      setPlayers(up);
+    }
+
     const v = checkWin(up, lovers);
     if (v) {
       endGame(v, up, cycle);
@@ -1321,6 +1420,12 @@ export default function GameBoard() {
     // A6: Guard against double execution
     if (round2Guard.current) return;
     round2Guard.current = true;
+
+    // JOURNAL UPDATE: after debate round 1 — all AIs heard the first round
+    const debateR1Recap = buildDebateRecap(cycle, 1, messages, players, "");
+    let updatedPs = await updateJournals(players, `Jour ${cycle}, Tour 1`, debateR1Recap, `jour-${cycle}-tour1`);
+    setPlayers(updatedPs);
+
     // Build a quick summary of round 1 for the narrator
     const round1Msgs = messages.filter((m) => m.cycle === cycle && !m.isSystem && m.speaker);
     const mentioned = new Map<string, number>();
@@ -1375,6 +1480,8 @@ export default function GameBoard() {
     setHAlive(true);
     setByokKey(config.byokKey || null);
     setByokError(null);
+    const prov = (sessionStorage.getItem("lycana_provider") as "anthropic" | "openai") || "anthropic";
+    setProvider(prov);
   }
 
   function launchFromIntro() {

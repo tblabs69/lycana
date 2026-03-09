@@ -29,6 +29,12 @@ export default function ConfigScreen({ onStart, onShowTuto }: ConfigScreenProps)
   const [byokValidating, setByokValidating] = useState(false);
   const [byokToast, setByokToast] = useState(false);
   const byokInputRef = useRef<HTMLInputElement>(null);
+  const [provider, setProvider] = useState<"anthropic" | "openai">(() => {
+    if (typeof window !== "undefined") {
+      return (sessionStorage.getItem("lycana_provider") as "anthropic" | "openai") || "anthropic";
+    }
+    return "anthropic";
+  });
 
   const wolfCount = getWolfCount(playerCount);
 
@@ -74,13 +80,14 @@ export default function ConfigScreen({ onStart, onShowTuto }: ConfigScreenProps)
 
   function handleStart() {
     const roles = buildRolesFromConfig(playerCount, [...selectedRoles], wolfCount);
-    // Store BYOK key in sessionStorage (never sent to server in body, only via header)
+    // Store BYOK key and provider in sessionStorage
     const trimmedKey = byokKey.trim();
     if (trimmedKey) {
       sessionStorage.setItem("lycana_byok", trimmedKey);
     } else {
       sessionStorage.removeItem("lycana_byok");
     }
+    sessionStorage.setItem("lycana_provider", provider);
     onStart({
       playerCount,
       wolfCount,
@@ -126,7 +133,7 @@ export default function ConfigScreen({ onStart, onShowTuto }: ConfigScreenProps)
         <div className="bg-white/5 border border-white/8 rounded-xl p-4 mb-4">
           <div className="flex items-center justify-between mb-2">
             <label className="text-xs text-gray-400 uppercase tracking-wider">
-              🔑 Ta clé API Anthropic <span className="text-gray-600 normal-case">(optionnel)</span>
+              🔑 Ta clé API <span className="text-gray-600 normal-case">(optionnel)</span>
             </label>
             {byokValidated && (
               <span className="text-xs text-green-400 font-medium flex items-center gap-1">
@@ -134,6 +141,36 @@ export default function ConfigScreen({ onStart, onShowTuto }: ConfigScreenProps)
               </span>
             )}
           </div>
+
+          {/* Provider toggle */}
+          <div className="flex gap-2 mb-3">
+            {(["anthropic", "openai"] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => {
+                  setProvider(p);
+                  setByokValidated(false);
+                }}
+                className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                  provider === p
+                    ? p === "anthropic"
+                      ? "border-orange-600/50 bg-orange-900/20 text-orange-300"
+                      : "border-emerald-600/50 bg-emerald-900/20 text-emerald-300"
+                    : "border-white/10 bg-white/5 text-gray-500 hover:bg-white/8"
+                }`}
+              >
+                {p === "anthropic" ? "Anthropic (Claude)" : "OpenAI (GPT)"}
+              </button>
+            ))}
+          </div>
+
+          {/* Cost comparison */}
+          <p className="text-gray-600 text-xs mb-3">
+            {provider === "anthropic"
+              ? "Claude Haiku 4.5 — ~0.30€/partie — prompt caching activé"
+              : "GPT-4o-mini — ~0.10€/partie — moins cher, pas de cache"
+            }
+          </p>
 
           {/* Input + eye toggle + lock badge */}
           {!byokValidated ? (
@@ -144,8 +181,15 @@ export default function ConfigScreen({ onStart, onShowTuto }: ConfigScreenProps)
                     ref={byokInputRef}
                     type={showByokPassword ? "text" : "password"}
                     value={byokKey}
-                    onChange={(e) => { setByokKey(e.target.value); setByokValidated(false); }}
-                    placeholder="sk-ant-..."
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setByokKey(val);
+                      setByokValidated(false);
+                      // Auto-detect provider from key prefix
+                      if (val.startsWith("sk-ant-")) setProvider("anthropic");
+                      else if (val.startsWith("sk-") && !val.startsWith("sk-ant-")) setProvider("openai");
+                    }}
+                    placeholder={provider === "anthropic" ? "sk-ant-..." : "sk-..."}
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 pr-10 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-yellow-600/50 transition-colors font-mono"
                   />
                   <button
@@ -174,18 +218,26 @@ export default function ConfigScreen({ onStart, onShowTuto }: ConfigScreenProps)
                     try {
                       const res = await fetch("/api/debate", {
                         method: "POST",
-                        headers: { "Content-Type": "application/json", "x-api-key": byokKey.trim() },
+                        headers: {
+                          "Content-Type": "application/json",
+                          "x-api-key": byokKey.trim(),
+                          "x-provider": provider,
+                        },
                         body: JSON.stringify({
                           player: { name: "Test", emoji: "🧪", color: "#888", gender: "il", role: "Villageois", alive: true, revealedRole: false, archetype: "prudent" },
                           players: [], messages: [], cycle: 1, round: 1, nightResult: null, history: [], seerLog: [],
                         }),
                       });
                       if (res.status === 401) {
-                        alert("Clé invalide ou expirée. Verifie-la sur console.anthropic.com");
+                        alert(provider === "anthropic"
+                          ? "Clé invalide ou expirée. Vérifie-la sur console.anthropic.com"
+                          : "Clé invalide ou expirée. Vérifie-la sur platform.openai.com"
+                        );
                       } else {
                         setByokValidated(true);
                         setByokToast(true);
                         sessionStorage.setItem("lycana_byok", byokKey.trim());
+                        sessionStorage.setItem("lycana_provider", provider);
                         setTimeout(() => setByokToast(false), 3500);
                       }
                     } catch {
@@ -201,7 +253,7 @@ export default function ConfigScreen({ onStart, onShowTuto }: ConfigScreenProps)
             </>
           ) : (
             <div className="flex items-center gap-2 py-1">
-              <span className="text-green-400 text-sm">&#128274; Clé configurée</span>
+              <span className="text-green-400 text-sm">&#128274; Clé configurée ({provider === "anthropic" ? "Claude" : "GPT"})</span>
               <button
                 type="button"
                 onClick={() => {
@@ -232,7 +284,7 @@ export default function ConfigScreen({ onStart, onShowTuto }: ConfigScreenProps)
           </button>
           {showByokDetails && (
             <ul className="mt-2 space-y-1.5 text-xs text-gray-500 pl-3 border-l border-white/5">
-              <li>&#8226; Ta clé est envoyée directement de ton navigateur à l&apos;API Anthropic. Nos serveurs servent juste de relais sécurisé.</li>
+              <li>&#8226; Ta clé est envoyée directement de ton navigateur à l&apos;API {provider === "anthropic" ? "Anthropic" : "OpenAI"}. Nos serveurs servent juste de relais sécurisé.</li>
               <li>&#8226; Elle est stockée dans le <span className="text-gray-400 font-mono">sessionStorage</span> de ton navigateur : elle disparaît dès que tu fermes l&apos;onglet.</li>
               <li>&#8226; Aucune donnée personnelle n&apos;est collectée.</li>
             </ul>
@@ -240,15 +292,18 @@ export default function ConfigScreen({ onStart, onShowTuto }: ConfigScreenProps)
 
           {/* Get a key link */}
           <a
-            href="https://console.anthropic.com/settings/keys"
+            href={provider === "anthropic" ? "https://console.anthropic.com/settings/keys" : "https://platform.openai.com/api-keys"}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-yellow-600/80 text-xs hover:text-yellow-500 transition-colors mt-2"
           >
-            Obtenir une clé gratuitement &#8594;
+            Obtenir une clé {provider === "anthropic" ? "Anthropic" : "OpenAI"} &#8594;
           </a>
           <p className="text-gray-600 text-xs mt-0.5">
-            Crée un compte Anthropic (gratuit) et génère une clé API. Coût moyen d&apos;une partie : ~0.30€.
+            {provider === "anthropic"
+              ? "Crée un compte Anthropic (gratuit) et génère une clé API. Coût moyen d'une partie : ~0.30€."
+              : "Crée un compte OpenAI et génère une clé API. Coût moyen d'une partie : ~0.10€."
+            }
           </p>
         </div>
 

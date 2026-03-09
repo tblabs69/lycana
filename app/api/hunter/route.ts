@@ -2,14 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import type { HunterRequest, HunterResponse } from "@/types/game";
 import { buildSystemPrompt } from "@/lib/prompts";
 import { buildHunterContext } from "@/lib/context-builder";
-import { callClaude, MODELS, TEMPERATURES } from "@/lib/anthropic";
+import { callLLM } from "@/lib/llm";
+import { TEMPERATURES } from "@/lib/providers";
 import { findPlayer, parseName } from "@/lib/game-engine";
-import { applyRateLimit, extractByokKey, validatePlayerName, safeErrorMessage } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, extractProvider, validatePlayerName, safeErrorMessage } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const limited = applyRateLimit(req);
   if (limited) return limited;
   const byokKey = extractByokKey(req);
+  const provider = extractProvider(req, byokKey);
+  const apiKey = byokKey || process.env[provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY"] || "";
   try {
     const body: HunterRequest = await req.json();
     const { hunter, players, messages, history, cycle } = body;
@@ -21,19 +24,13 @@ export async function POST(req: NextRequest) {
     const systemPrompt = buildSystemPrompt(hunter, players);
     const userMessage = buildHunterContext(hunter, players, messages, history, cycle);
 
-    const raw = await callClaude({
-      systemPrompt,
-      userMessage,
-      model: MODELS.hunter,
-      maxTokens: 80,
-      temperature: TEMPERATURES.villager,
-      byokKey,
+    const { text: raw } = await callLLM(apiKey, provider, {
+      systemPrompt, userMessage, maxTokens: 80, temperature: TEMPERATURES.villager,
     });
 
     const parsed = parseName(raw, "TIR");
     const target = parsed ? findPlayer(players, parsed) : null;
 
-    // Fallback : cible valide aléatoire
     const validTargets = players.filter(
       (p) => p.alive && p.name !== hunter.name
     );
@@ -51,7 +48,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json<HunterResponse>({ target: finalTarget });
   } catch (err: unknown) {
     if (byokKey && err instanceof Error && (err.message?.includes("401") || err.message?.includes("auth") || err.message?.includes("API key"))) {
-      return NextResponse.json({ target: "", byokError: "Clé API invalide. Vérifie-la sur console.anthropic.com" }, { status: 401 });
+      return NextResponse.json({ target: "", byokError: "Clé API invalide." }, { status: 401 });
     }
     console.error("[/api/hunter]", safeErrorMessage(err));
     return NextResponse.json({ target: "" }, { status: 500 });

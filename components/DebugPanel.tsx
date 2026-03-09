@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Player, Message, NightResponse, SeerEntry, Lovers } from "@/types/game";
+import type { Player, Message, NightResponse, SeerEntry, Lovers, JournalEntry } from "@/types/game";
 import { isWolfRole } from "@/lib/game-engine";
 
 interface DebugPanelProps {
@@ -21,7 +21,8 @@ export default function DebugPanel({
   lovers, corbeauTarget, directives, wolfReason,
 }: DebugPanelProps) {
   const [collapsed, setCollapsed] = useState(true);
-  const [tab, setTab] = useState<"wolf" | "love" | "directives" | "roles">("wolf");
+  const [tab, setTab] = useState<"wolf" | "love" | "directives" | "roles" | "journal">("wolf");
+  const [journalPlayer, setJournalPlayer] = useState<string | null>(null);
 
   const wolves = players.filter((p) => isWolfRole(p.role));
   const wolfMessages = messages.filter((m) => m.isNight && m.cycle === cycle);
@@ -67,7 +68,7 @@ export default function DebugPanel({
 
       {/* Tabs */}
       <div className="flex border-b border-white/5">
-        {(["wolf", "love", "directives", "roles"] as const).map((t) => (
+        {(["wolf", "love", "directives", "roles", "journal"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -75,7 +76,7 @@ export default function DebugPanel({
               tab === t ? "text-red-400 bg-white/5" : "text-gray-500 hover:text-gray-300"
             }`}
           >
-            {t === "wolf" ? "🐺 Loups" : t === "love" ? "💘 Amour" : t === "directives" ? "📋 Dir." : "🎭 Rôles"}
+            {t === "wolf" ? "🐺 Loups" : t === "love" ? "💘 Amour" : t === "directives" ? "📋 Dir." : t === "roles" ? "🎭 Rôles" : "📓 Journal"}
           </button>
         ))}
       </div>
@@ -201,6 +202,48 @@ export default function DebugPanel({
                 C{s.cycle}: {s.target} = {s.result}
               </div>
             ))}
+          </>
+        )}
+
+        {tab === "journal" && (
+          <>
+            <div className="text-gray-400 mb-2">Sélectionne un joueur :</div>
+            <div className="flex flex-wrap gap-1 mb-2">
+              {players.filter((p) => !p.isHuman).map((p) => (
+                <button
+                  key={p.name}
+                  onClick={() => setJournalPlayer(p.name)}
+                  className={`px-2 py-0.5 rounded text-xs transition-colors ${
+                    journalPlayer === p.name
+                      ? "bg-white/20 text-white"
+                      : "bg-white/5 text-gray-400 hover:text-gray-200"
+                  }`}
+                  style={{ borderLeft: `2px solid ${p.color || "#666"}` }}
+                >
+                  {p.emoji} {p.name}
+                  {(p.internalJournal?.length || 0) > 0 && (
+                    <span className="text-gray-500 ml-1">({p.internalJournal!.length})</span>
+                  )}
+                </button>
+              ))}
+            </div>
+            {journalPlayer && (() => {
+              const p = players.find((pl) => pl.name === journalPlayer);
+              const journal = p?.internalJournal || [];
+              if (journal.length === 0) return <div className="text-gray-600">Aucune entrée.</div>;
+              return journal.map((entry, i) => (
+                <div key={i} className="mb-2 p-1.5 rounded bg-white/5">
+                  <div className="text-yellow-300/80 font-bold text-[10px] mb-1">[{entry.phase}]</div>
+                  {entry.observations && <div className="text-gray-300"><span className="text-gray-500">OBS:</span> {entry.observations}</div>}
+                  {entry.analysis && <div className="text-blue-300/80"><span className="text-gray-500">ANA:</span> {entry.analysis}</div>}
+                  {entry.suspicions && <div className="text-red-300/80"><span className="text-gray-500">SUS:</span> {entry.suspicions}</div>}
+                  {entry.alliances && <div className="text-green-300/80"><span className="text-gray-500">ALL:</span> {entry.alliances}</div>}
+                  {entry.threats && <div className="text-orange-300/80"><span className="text-gray-500">MEN:</span> {entry.threats}</div>}
+                  {entry.strategy && <div className="text-purple-300/80"><span className="text-gray-500">STR:</span> {entry.strategy}</div>}
+                </div>
+              ));
+            })()}
+            {!journalPlayer && <div className="text-gray-600">Clique sur un joueur pour voir son journal.</div>}
           </>
         )}
       </div>

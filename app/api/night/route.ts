@@ -9,15 +9,18 @@ import {
   buildCorbeauNightContext,
   buildCupidonNightContext,
 } from "@/lib/context-builder";
-import { callClaude, MODELS, TEMPERATURES } from "@/lib/anthropic";
+import { callLLM } from "@/lib/llm";
+import { TEMPERATURES } from "@/lib/providers";
 import { findPlayer, parseName, parseWitchAction, isWolfRole } from "@/lib/game-engine";
 import { debugLog } from "@/lib/debug";
-import { applyRateLimit, extractByokKey, safeErrorMessage } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, extractProvider, safeErrorMessage } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const limited = applyRateLimit(req);
   if (limited) return limited;
   const byokKey = extractByokKey(req);
+  const provider = extractProvider(req, byokKey);
+  const apiKey = byokKey || process.env[provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY"] || "";
   try {
     const body: NightRequest = await req.json();
     const { players, cycle, seerLog, potions, salvateurLastTarget, messages, history, lovers } = body;
@@ -37,9 +40,8 @@ export async function POST(req: NextRequest) {
     if (cupidon && cycle === 1 && !cupidon.isHuman) {
       const systemPrompt = buildSystemPrompt(cupidon, players);
       const userMessage = buildCupidonNightContext(players, cupidon);
-      const raw = await callClaude({
-        systemPrompt, userMessage,
-        model: MODELS.villager, maxTokens: 50, temperature: TEMPERATURES.villager, byokKey,
+      const { text: raw } = await callLLM(apiKey, provider, {
+        systemPrompt, userMessage, maxTokens: 50, temperature: TEMPERATURES.villager,
       });
       const match = raw.match(/AMOUREUX:\s*([A-Za-zÀ-ÿ]+)\s*,\s*([A-Za-zÀ-ÿ]+)/i);
       if (match) {
@@ -59,16 +61,13 @@ export async function POST(req: NextRequest) {
     debugLog(`[WOLF CHAT] Nuit ${cycle}`);
 
     if (wolves.length > 0) {
-      // Use the first alive wolf for decision (they coordinate)
       const decisionWolf = wolves.find((w) => !w.isHuman) ?? wolves[0];
       if (!decisionWolf.isHuman) {
-        // Alpha conversion decision (AI only, once per game)
+        // Alpha conversion decision
         if (loupAlpha && !loupAlpha.isHuman && !loupAlpha.alphaUsed && cycle >= 2) {
-          // Alpha considers conversion from cycle 2 onwards (30% chance to attempt)
           const conversionChance = Math.random();
           if (conversionChance < 0.3) {
             const validConvertTargets = alive.filter((p) => !isWolfRole(p.role));
-            // Prefer high-value targets: Voyante, Sorcière, then random
             const highValue = validConvertTargets.filter((p) =>
               p.role === "Voyante" || p.role === "Sorcière" || p.role === "Chasseur"
             );
@@ -78,18 +77,16 @@ export async function POST(req: NextRequest) {
             if (convertTarget) {
               alphaConverted = convertTarget.name;
               debugLog(`[WOLF CHAT] Loup Alpha convertit : ${convertTarget.name} (${convertTarget.role})`);
-              // No wolfTarget this night — conversion replaces the kill
             }
           }
         }
 
-        // Normal wolf target (only if no conversion this turn)
+        // Normal wolf target (only if no conversion)
         if (!alphaConverted) {
           const systemPrompt = buildSystemPrompt(decisionWolf, players);
           const userMessage = buildWolfNightContext(players, decisionWolf, messages, history, cycle, lovers);
-          const raw = await callClaude({
-            systemPrompt, userMessage,
-            model: MODELS.wolves, maxTokens: 200, temperature: TEMPERATURES.wolf, byokKey,
+          const { text: raw } = await callLLM(apiKey, provider, {
+            systemPrompt, userMessage, maxTokens: 200, temperature: TEMPERATURES.wolf,
           });
 
           const parsed = parseName(raw, "CIBLE");
@@ -97,7 +94,6 @@ export async function POST(req: NextRequest) {
           wolfReason = reasonMatch ? reasonMatch[1].trim() : null;
 
           const target = parsed ? findPlayer(players, parsed) : null;
-          // A3: Filter out lover partner from valid targets
           let validTargets = alive.filter((p) => !isWolfRole(p.role));
           if (lovers) {
             const wolfLover = wolves.find((w) => w.name === lovers.player1 || w.name === lovers.player2);
@@ -119,10 +115,8 @@ export async function POST(req: NextRequest) {
       } else {
         debugLog(`[WOLF CHAT] Loup humain (${decisionWolf.name}) — attend choix du joueur`);
       }
-      // If human is wolf, wolfTarget will be set by the client
       debugLog(`[WOLF CHAT] Cible finale choisie : ${wolfTarget || (alphaConverted ? `CONVERT:${alphaConverted}` : "en attente (humain)")}`);
 
-      // Debug: wolf-lover constraint check
       if (lovers && wolfTarget) {
         const wolfLover = wolves.find((w) => w.name === lovers.player1 || w.name === lovers.player2);
         if (wolfLover) {
@@ -142,16 +136,14 @@ export async function POST(req: NextRequest) {
     let salvateurTarget: string | null = null;
     let corbeauTarget: string | null = null;
 
-    // These 3 are independent of wolfTarget → run in parallel
     const parallelTasks: Promise<void>[] = [];
 
     if (seer && !seer.isHuman) {
       parallelTasks.push((async () => {
         const systemPrompt = buildSystemPrompt(seer, players);
         const userMessage = buildSeerNightContext(players, seer, seerLog, messages, cycle);
-        const raw = await callClaude({
-          systemPrompt, userMessage,
-          model: MODELS.seer, maxTokens: 100, temperature: TEMPERATURES.villager, byokKey,
+        const { text: raw } = await callLLM(apiKey, provider, {
+          systemPrompt, userMessage, maxTokens: 100, temperature: TEMPERATURES.villager,
         });
         const parsed = parseName(raw, "INSPECTE");
         const target = parsed ? findPlayer(players, parsed) : null;
@@ -167,9 +159,8 @@ export async function POST(req: NextRequest) {
       parallelTasks.push((async () => {
         const systemPrompt = buildSystemPrompt(salvateur, players);
         const userMessage = buildSalvateurNightContext(players, salvateur, salvateurLastTarget ?? null);
-        const raw = await callClaude({
-          systemPrompt, userMessage,
-          model: MODELS.villager, maxTokens: 30, temperature: TEMPERATURES.villager, byokKey,
+        const { text: raw } = await callLLM(apiKey, provider, {
+          systemPrompt, userMessage, maxTokens: 30, temperature: TEMPERATURES.villager,
         });
         const parsed = parseName(raw, "PROTEGE");
         const target = parsed ? findPlayer(players, parsed) : null;
@@ -183,9 +174,8 @@ export async function POST(req: NextRequest) {
       parallelTasks.push((async () => {
         const systemPrompt = buildSystemPrompt(corbeau, players);
         const userMessage = buildCorbeauNightContext(players, corbeau);
-        const raw = await callClaude({
-          systemPrompt, userMessage,
-          model: MODELS.villager, maxTokens: 30, temperature: TEMPERATURES.villager, byokKey,
+        const { text: raw } = await callLLM(apiKey, provider, {
+          systemPrompt, userMessage, maxTokens: 30, temperature: TEMPERATURES.villager,
         });
         const parsed = parseName(raw, "CORBEAU");
         if (parsed && parsed.toUpperCase() !== "PERSONNE") {
@@ -204,9 +194,8 @@ export async function POST(req: NextRequest) {
     if (witch && !witch.isHuman && wolfTarget && (potions.heal || potions.poison)) {
       const systemPrompt = buildSystemPrompt(witch, players);
       const userMessage = buildWitchNightContext(wolfTarget, potions, players, cycle);
-      const raw = await callClaude({
-        systemPrompt, userMessage,
-        model: MODELS.witch, maxTokens: 30, temperature: TEMPERATURES.villager, byokKey,
+      const { text: raw } = await callLLM(apiKey, provider, {
+        systemPrompt, userMessage, maxTokens: 30, temperature: TEMPERATURES.villager,
       });
       witchAction = parseWitchAction(raw);
       if (witchAction?.toUpperCase() === "SAUVER" && !potions.heal) {
@@ -254,7 +243,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: unknown) {
     if (byokKey && err instanceof Error && (err.message?.includes("401") || err.message?.includes("auth") || err.message?.includes("API key"))) {
-      return NextResponse.json({ wolfTarget: null, seerTarget: null, seerResult: null, witchAction: null, byokError: "Clé API invalide. Vérifie-la sur console.anthropic.com" }, { status: 401 });
+      return NextResponse.json({ wolfTarget: null, seerTarget: null, seerResult: null, witchAction: null, byokError: "Clé API invalide." }, { status: 401 });
     }
     console.error("[/api/night]", safeErrorMessage(err));
     return NextResponse.json(

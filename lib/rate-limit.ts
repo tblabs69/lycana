@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Provider } from "@/lib/providers";
+import { detectProvider } from "@/lib/providers";
 
 /** Simple in-memory rate limiter per IP — 60 req/min */
 
@@ -39,10 +41,25 @@ function checkRateLimit(ip: string): { allowed: boolean; remaining: number } {
   return { allowed: true, remaining: maxRequests - entry.count };
 }
 
-/** Extract BYOK key from request header — never log it */
+/** Extract BYOK key from request header — never log it. Accepts both Anthropic (sk-ant-) and OpenAI (sk-) keys */
 export function extractByokKey(req: NextRequest): string | undefined {
   const key = req.headers.get("x-api-key");
-  return key && /^sk-ant-[a-zA-Z0-9_-]{20,}$/.test(key) ? key : undefined;
+  if (!key) return undefined;
+  // Anthropic: sk-ant-... or OpenAI: sk-...
+  if (/^sk-ant-[a-zA-Z0-9_-]{20,}$/.test(key)) return key;
+  if (/^sk-[a-zA-Z0-9_-]{20,}$/.test(key)) return key;
+  return undefined;
+}
+
+/** Extract provider from request — header > key detection > default */
+export function extractProvider(req: NextRequest, byokKey?: string): Provider {
+  const header = req.headers.get("x-provider");
+  if (header === "openai" || header === "anthropic") return header;
+  if (byokKey) {
+    const detected = detectProvider(byokKey);
+    if (detected) return detected;
+  }
+  return (process.env.DEFAULT_PROVIDER as Provider) || "anthropic";
 }
 
 /** Validate player name: unicode letters/numbers/spaces/hyphens/apostrophes, max 20 chars */
@@ -57,7 +74,7 @@ export function validatePlayerName(name: unknown): string | null {
 /** Sanitize error for logging — strip API keys and stack traces */
 export function safeErrorMessage(err: unknown): string {
   if (err instanceof Error) {
-    const msg = (err.message || "Unknown error").replace(/sk-ant-[a-zA-Z0-9_-]+/g, "[REDACTED]");
+    const msg = (err.message || "Unknown error").replace(/sk-[a-zA-Z0-9_-]{20,}/g, "[REDACTED]");
     const status = (err as { status?: number }).status;
     return status ? `${status}: ${msg}` : msg;
   }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { logGameCost, resetTokenStats, getTokenStats } from "@/lib/anthropic";
+import { logGameCost, resetTokenStats, getTokenStats } from "@/lib/llm";
 
 export async function GET() {
   const cost = logGameCost();

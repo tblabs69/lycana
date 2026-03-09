@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Player, Message, Role, Lovers } from "@/types/game";
-import { callClaude, MODELS, TEMPERATURES } from "@/lib/anthropic";
+import { callLLMJSON } from "@/lib/llm";
+import { TEMPERATURES } from "@/lib/providers";
 import { VOTE_BATCH_SYSTEM_PROMPT } from "@/lib/prompts";
 import { isWolfRole } from "@/lib/game-engine";
 import { debugLog } from "@/lib/debug";
-import { applyRateLimit, extractByokKey, safeErrorMessage } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, extractProvider, safeErrorMessage } from "@/lib/rate-limit";
 
 interface BatchVoteRequest {
   voters: { name: string; archetype: string; role: Role; contrarian?: boolean }[];
@@ -22,6 +23,8 @@ export async function POST(req: NextRequest) {
   const limited = applyRateLimit(req);
   if (limited) return limited;
   const byokKey = extractByokKey(req);
+  const provider = extractProvider(req, byokKey);
+  const apiKey = byokKey || process.env[provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY"] || "";
   try {
     const body: BatchVoteRequest = await req.json();
     const { voters, players, messages, cycle, lovers } = body;
@@ -75,23 +78,34 @@ ${voters.map((v, i) => `${v.name}: ${validTargetsPerVoter[i]}`).join("\n")}
 
 IMPORTANT : JSON uniquement, pas de texte autour.`;
 
-    const raw = await callClaude({
+    const { text: raw } = await callLLMJSON(apiKey, provider, {
       systemPrompt,
       userMessage,
-      model: MODELS.villager,
       maxTokens: voters.length * 50 + 50,
       temperature: TEMPERATURES.villager,
-      byokKey,
     });
 
-    // Parse JSON from response
-    const jsonMatch = raw.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-      console.error("[vote-batch] No JSON found in response");
-      return NextResponse.json<BatchVoteResponse>({ votes: [] }, { status: 500 });
+    // Parse JSON from response — OpenAI json_object returns clean JSON, Anthropic may wrap it
+    let jsonStr: string;
+    if (provider === "openai") {
+      const trimmed = raw.trim();
+      if (trimmed.startsWith("[")) {
+        jsonStr = trimmed;
+      } else {
+        // Might be {"votes": [...]} — extract the array
+        const arrMatch = trimmed.match(/\[[\s\S]*\]/);
+        jsonStr = arrMatch ? arrMatch[0] : "[]";
+      }
+    } else {
+      const jsonMatch = raw.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) {
+        console.error("[vote-batch] No JSON found in response");
+        return NextResponse.json<BatchVoteResponse>({ votes: [] }, { status: 500 });
+      }
+      jsonStr = jsonMatch[0];
     }
 
-    const parsed = JSON.parse(jsonMatch[0]) as { voter: string; target: string; reason: string }[];
+    const parsed = JSON.parse(jsonStr) as { voter: string; target: string; reason: string }[];
 
     // B1: Validate votes, handle BLANC (max 2) + lover constraints
     let blankCount = 0;
@@ -107,13 +121,12 @@ IMPORTANT : JSON uniquement, pas de texte autour.`;
 
       const target = alive.find((p) => p.name.toLowerCase() === v.target?.toLowerCase() && p.name !== voter?.name);
       if (!voter || !target) {
-        // Fallback: random valid target
         const validTargets = alive.filter((p) => p.name !== v.voter);
         const randomTarget = validTargets[Math.floor(Math.random() * validTargets.length)];
         return { voter: v.voter || "?", target: randomTarget?.name || "", reason: v.reason || "" };
       }
 
-      // A1: Lover safety net — if lover votes against partner, redirect
+      // A1: Lover safety net
       if (lovers && target) {
         const isLover = voter.name === lovers.player1 || voter.name === lovers.player2;
         if (isLover) {
@@ -133,7 +146,7 @@ IMPORTANT : JSON uniquement, pas de texte autour.`;
     return NextResponse.json<BatchVoteResponse>({ votes });
   } catch (err: unknown) {
     if (byokKey && err instanceof Error && (err.message?.includes("401") || err.message?.includes("auth") || err.message?.includes("API key"))) {
-      return NextResponse.json({ votes: [], byokError: "Clé API invalide. Vérifie-la sur console.anthropic.com" }, { status: 401 });
+      return NextResponse.json({ votes: [], byokError: "Clé API invalide." }, { status: 401 });
     }
     console.error("[/api/vote-batch]", safeErrorMessage(err));
     return NextResponse.json<BatchVoteResponse>({ votes: [] }, { status: 500 });

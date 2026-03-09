@@ -52,6 +52,8 @@ export interface Player extends PlayerIdentity {
   idiotRevealed?: boolean;
   /** Loup Alpha: conversion power used */
   alphaUsed?: boolean;
+  /** AI internal journal — persistent memory across phases */
+  internalJournal?: JournalEntry[];
 }
 
 export interface Message {
@@ -248,4 +250,30 @@ export interface LoveChatRequest {
 export interface LoveChatResponse {
   text: string;
   revealedRole?: boolean; // true if the AI revealed their role in the message
+}
+
+// ── INTERNAL JOURNAL (AI memory) ──────────────────────────────────────────
+
+export interface JournalEntry {
+  phase: string;        // "nuit-1", "jour-1-tour1", "jour-1-tour2", "vote-1", "nuit-2", etc.
+  observations: string; // Factual observations
+  analysis: string;     // Personal interpretation
+  suspicions: string;   // Who they suspect and why (fort/moyen/faible)
+  alliances: string;    // Who they consider allies
+  threats: string;      // Who is dangerous to them personally
+  strategy: string;     // Next steps
+}
+
+export interface JournalUpdateRequest {
+  playerId: string;
+  playerName: string;
+  role: string;
+  archetype: string;
+  currentJournal: JournalEntry[];
+  phaseDescription: string;
+  phaseSummary: string;
+}
+
+export interface JournalUpdateResponse {
+  entry: JournalEntry;
 }

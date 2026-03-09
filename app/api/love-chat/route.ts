@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { LoveChatRequest, LoveChatResponse } from "@/types/game";
 import { buildSystemPrompt } from "@/lib/prompts";
-import { callClaude, cleanResponse, MODELS, TEMPERATURES } from "@/lib/anthropic";
+import { callLLM } from "@/lib/llm";
+import { TEMPERATURES } from "@/lib/providers";
+import { cleanResponse } from "@/lib/anthropic";
 import { isFeminine, isWolfRole } from "@/lib/game-engine";
 import { debugLog } from "@/lib/debug";
-import { applyRateLimit, extractByokKey, validatePlayerName, safeErrorMessage } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, extractProvider, validatePlayerName, safeErrorMessage } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const limited = applyRateLimit(req);
   if (limited) return limited;
   const byokKey = extractByokKey(req);
+  const provider = extractProvider(req, byokKey);
+  const apiKey = byokKey || process.env[provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY"] || "";
   try {
     const body: LoveChatRequest = await req.json();
     const { player, partnerName, humanMessage, lovers, cycle } = body;
@@ -23,11 +27,9 @@ export async function POST(req: NextRequest) {
 
     const systemPrompt = buildSystemPrompt(player, []);
     const fem = isFeminine(player.name);
-    const partnerFem = isFeminine(partnerName);
 
     let userMessage: string;
 
-    // C1: Enriched love chat with strategic role revelation dilemma
     const isWolf = isWolfRole(player.role);
     const isMixed = lovers.isMixedCouple;
     const knowsMixed = lovers.coupleKnowsMixedStatus;
@@ -50,7 +52,6 @@ export async function POST(req: NextRequest) {
       : "";
 
     if (humanMessage) {
-      // Human sent a message, AI lover responds
       userMessage = `Tu es amoureux${fem ? "se" : ""} de ${partnerName}. Nuit ${cycle}, discussion privée.
 Si l'un de vous meurt, l'autre meurt aussi.
 ${firstNightWarning}${roleContext}
@@ -61,7 +62,6 @@ Réponds en 1-2 phrases. Sois naturel${fem ? "le" : ""}, intime.
 Tu peux être tendre, inqui${fem ? "ète" : "et"}, protecteur${fem ? "trice" : ""}, ou stratégique.
 Si tu choisis de révéler ton rôle, fais-le clairement avec "je suis [rôle]".`;
     } else {
-      // AI-AI exchange: this AI initiates
       userMessage = `Tu es amoureux${fem ? "se" : ""} de ${partnerName}. Nuit ${cycle}, discussion privée.
 Si l'un de vous meurt, l'autre meurt aussi.
 ${firstNightWarning}${roleContext}
@@ -71,13 +71,8 @@ DILEMME : Révéler ton rôle renforce la confiance mais t'expose. Le cacher te 
 Si tu choisis de révéler ton rôle, dis-le clairement avec "je suis [rôle]".`;
     }
 
-    const raw = await callClaude({
-      systemPrompt,
-      userMessage,
-      model: MODELS.villager,
-      maxTokens: 150,
-      temperature: TEMPERATURES.villager,
-      byokKey,
+    const { text: raw } = await callLLM(apiKey, provider, {
+      systemPrompt, userMessage, maxTokens: 150, temperature: TEMPERATURES.villager,
     });
 
     const text = cleanResponse(raw, player.name);
@@ -108,7 +103,7 @@ Si tu choisis de révéler ton rôle, dis-le clairement avec "je suis [rôle]".`
     return NextResponse.json<LoveChatResponse>({ text, revealedRole });
   } catch (err: unknown) {
     if (byokKey && err instanceof Error && (err.message?.includes("401") || err.message?.includes("auth") || err.message?.includes("API key"))) {
-      return NextResponse.json({ text: "...", byokError: "Clé API invalide. Vérifie-la sur console.anthropic.com" }, { status: 401 });
+      return NextResponse.json({ text: "...", byokError: "Clé API invalide." }, { status: 401 });
     }
     console.error("[/api/love-chat]", safeErrorMessage(err));
     return NextResponse.json({ text: "..." }, { status: 500 });

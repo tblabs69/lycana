@@ -7,10 +7,12 @@ import type {
   Lovers,
   NarratorTransition,
   NotableAccusation,
+  JournalEntry,
 } from "@/types/game";
 import { TURN_INSTRUCTIONS, VOTE_INSTRUCTION, ARCHETYPE_DESCRIPTIONS } from "@/lib/prompts";
 import { isWolfRole, shuffle } from "@/lib/game-engine";
 import { debugLog } from "@/lib/debug";
+import { formatJournalForContext, formatSuspicionsForVote, formatStrategyForNight } from "@/lib/journal";
 
 /** Wrap human-authored text to prevent prompt injection */
 function sandboxHumanText(text: string): string {
@@ -386,8 +388,11 @@ export function buildGameContext(
     ctx += "\n";
   }
 
-  // Historique structuré des cycles passés
-  if (history.length) {
+  // Journal-based memory for AI players, factual memory for human
+  if (player.internalJournal && player.internalJournal.length > 0 && !player.isHuman) {
+    ctx += "\n" + formatJournalForContext(player.internalJournal, players) + "\n\n";
+  } else if (history.length) {
+    // Fallback: factual game memory (for human or AI without journal yet)
     ctx += "MÉMOIRE DE PARTIE:\n";
     const wolvesFound: string[] = [];
     const innocentsKilled: string[] = [];
@@ -573,6 +578,11 @@ export function buildVoteContext(
 
   let ctx = `RAPPEL : Tu es ${player.name}. Ne parle JAMAIS de toi à la 3ème personne. Ne vote JAMAIS pour toi-même.\n\n`;
 
+  // Inject journal suspicions for AI voters
+  if (player.internalJournal && player.internalJournal.length > 0 && !player.isHuman) {
+    ctx += formatSuspicionsForVote(player.internalJournal) + "\n\n";
+  }
+
   // Compressed debate: keep only last 8 messages + extract accusations
   const accusations = new Map<string, string[]>(); // accused → accusers
   currentMessages.forEach((m) => {
@@ -738,6 +748,11 @@ export function buildWolfNightContext(
   }
 
   let ctx = `C'est la nuit. Tu es Loup-Garou avec ${partnerNames}.\nVous devez choisir une victime à dévorer.\n${loverWarning}\n`;
+
+  // Inject journal strategy for wolf night decisions
+  if (wolfPlayer.internalJournal && wolfPlayer.internalJournal.length > 0) {
+    ctx += "\n" + formatStrategyForNight(wolfPlayer.internalJournal) + "\n\n";
+  }
 
   // Debate summary — cycle 1 has NO debate yet
   if (cycle === 1 || !cycle) {

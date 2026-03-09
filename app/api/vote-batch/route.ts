@@ -5,7 +5,7 @@ import { TEMPERATURES } from "@/lib/providers";
 import { VOTE_BATCH_SYSTEM_PROMPT } from "@/lib/prompts";
 import { isWolfRole } from "@/lib/game-engine";
 import { debugLog } from "@/lib/debug";
-import { applyRateLimit, extractByokKey, extractProvider, safeErrorMessage, logRouteInfo } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, extractProvider, safeErrorMessage, logRouteInfo, isAuthError } from "@/lib/rate-limit";
 
 interface BatchVoteRequest {
   voters: { name: string; archetype: string; role: Role; contrarian?: boolean }[];
@@ -146,10 +146,10 @@ IMPORTANT : JSON uniquement, pas de texte autour.`;
 
     return NextResponse.json<BatchVoteResponse>({ votes });
   } catch (err: unknown) {
-    if (byokKey && err instanceof Error && (err.message?.includes("401") || err.message?.includes("auth") || err.message?.includes("API key"))) {
+    console.error("[/api/vote-batch] ERROR:", safeErrorMessage(err), "| status:", (err as { status?: number })?.status);
+    if (byokKey && isAuthError(err)) {
       return NextResponse.json({ votes: [], byokError: "Clé API invalide." }, { status: 401 });
     }
-    console.error("[/api/vote-batch]", safeErrorMessage(err));
     return NextResponse.json<BatchVoteResponse>({ votes: [] }, { status: 500 });
   }
 }

@@ -83,9 +83,20 @@ export function safeErrorMessage(err: unknown): string {
   return "Unknown error";
 }
 
-/** Log route info in dev — provider, key prefix, header presence */
+/** Log route info — always logs (console.log) for debugging provider routing */
 export function logRouteInfo(route: string, provider: Provider, apiKey: string, req: NextRequest) {
-  debugLog(`[${route}] Provider: ${provider} | Key prefix: ${apiKey?.substring(0, 7) || "NONE"} | x-provider header: ${req.headers.get("x-provider") || "MISSING"} | x-api-key present: ${!!req.headers.get("x-api-key")}`);
+  console.log(`[${route}] Provider: ${provider} | Key prefix: ${apiKey?.substring(0, 10) || "NONE"} | Key length: ${apiKey?.length || 0} | x-provider header: ${req.headers.get("x-provider") || "MISSING"} | x-api-key present: ${!!req.headers.get("x-api-key")} | byokKey extracted: ${!!apiKey && apiKey.startsWith("sk-")}`);
+}
+
+/** Check if an error is a true 401 auth error from the LLM provider */
+export function isAuthError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  // Both Anthropic and OpenAI SDKs set .status on API errors
+  const status = (err as { status?: number }).status;
+  if (status === 401) return true;
+  // Fallback: only match exact "401" status string, not vague words like "auth"
+  if (err.message?.includes("401")) return true;
+  return false;
 }
 
 /** Returns a 429 response if rate limited, or null if OK */

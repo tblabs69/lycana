@@ -5,7 +5,7 @@ import { buildHunterContext } from "@/lib/context-builder";
 import { callLLM } from "@/lib/llm";
 import { TEMPERATURES } from "@/lib/providers";
 import { findPlayer, parseName } from "@/lib/game-engine";
-import { applyRateLimit, extractByokKey, extractProvider, validatePlayerName, safeErrorMessage, logRouteInfo } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, extractProvider, validatePlayerName, safeErrorMessage, logRouteInfo, isAuthError } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const limited = applyRateLimit(req);
@@ -48,10 +48,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json<HunterResponse>({ target: finalTarget });
   } catch (err: unknown) {
-    if (byokKey && err instanceof Error && (err.message?.includes("401") || err.message?.includes("auth") || err.message?.includes("API key"))) {
+    console.error("[/api/hunter] ERROR:", safeErrorMessage(err), "| status:", (err as { status?: number })?.status);
+    if (byokKey && isAuthError(err)) {
       return NextResponse.json({ target: "", byokError: "Clé API invalide." }, { status: 401 });
     }
-    console.error("[/api/hunter]", safeErrorMessage(err));
     return NextResponse.json({ target: "" }, { status: 500 });
   }
 }

@@ -6,7 +6,7 @@ import { TEMPERATURES } from "@/lib/providers";
 import { cleanResponse } from "@/lib/anthropic";
 import { isWolfRole } from "@/lib/game-engine";
 import { debugLog } from "@/lib/debug";
-import { applyRateLimit, extractByokKey, extractProvider, safeErrorMessage, logRouteInfo } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, extractProvider, safeErrorMessage, logRouteInfo, isAuthError } from "@/lib/rate-limit";
 
 interface WolfChatRequest {
   wolf: Player;
@@ -104,10 +104,10 @@ Sois naturel, bref, complice. Parle comme un conspirateur, pas comme un analyste
 
     return NextResponse.json({ text });
   } catch (err: unknown) {
-    if (byokKey && err instanceof Error && (err.message?.includes("401") || err.message?.includes("auth") || err.message?.includes("API key"))) {
+    console.error("[/api/wolf-chat] ERROR:", safeErrorMessage(err), "| status:", (err as { status?: number })?.status);
+    if (byokKey && isAuthError(err)) {
       return NextResponse.json({ text: "...", byokError: "Clé API invalide." }, { status: 401 });
     }
-    console.error("[/api/wolf-chat]", safeErrorMessage(err));
     return NextResponse.json({ text: "..." }, { status: 500 });
   }
 }

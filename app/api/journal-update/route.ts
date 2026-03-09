@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { JournalEntry } from "@/types/game";
 import { callLLM } from "@/lib/llm";
 import { parseJournalEntry } from "@/lib/journal";
-import { applyRateLimit, extractByokKey, extractProvider, safeErrorMessage, logRouteInfo } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, extractProvider, safeErrorMessage, logRouteInfo, isAuthError } from "@/lib/rate-limit";
 
 interface JournalBatchRequest {
   updates: {
@@ -62,10 +62,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json<JournalBatchResponse>({ entries: results });
   } catch (err: unknown) {
-    if (byokKey && err instanceof Error && (err.message?.includes("401") || err.message?.includes("auth") || err.message?.includes("API key"))) {
+    console.error("[/api/journal-update] ERROR:", safeErrorMessage(err), "| status:", (err as { status?: number })?.status);
+    if (byokKey && isAuthError(err)) {
       return NextResponse.json({ entries: [], byokError: "Clé API invalide." }, { status: 401 });
     }
-    console.error("[/api/journal-update]", safeErrorMessage(err));
     return NextResponse.json<JournalBatchResponse>({ entries: [] }, { status: 500 });
   }
 }

@@ -6,7 +6,7 @@ import { TEMPERATURES } from "@/lib/providers";
 import { cleanResponse } from "@/lib/anthropic";
 import { isFeminine, isWolfRole } from "@/lib/game-engine";
 import { debugLog } from "@/lib/debug";
-import { applyRateLimit, extractByokKey, extractProvider, validatePlayerName, safeErrorMessage, logRouteInfo } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, extractProvider, validatePlayerName, safeErrorMessage, logRouteInfo, isAuthError } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const limited = applyRateLimit(req);
@@ -103,10 +103,10 @@ Si tu choisis de révéler ton rôle, dis-le clairement avec "je suis [rôle]".`
 
     return NextResponse.json<LoveChatResponse>({ text, revealedRole });
   } catch (err: unknown) {
-    if (byokKey && err instanceof Error && (err.message?.includes("401") || err.message?.includes("auth") || err.message?.includes("API key"))) {
+    console.error("[/api/love-chat] ERROR:", safeErrorMessage(err), "| status:", (err as { status?: number })?.status);
+    if (byokKey && isAuthError(err)) {
       return NextResponse.json({ text: "...", byokError: "Clé API invalide." }, { status: 401 });
     }
-    console.error("[/api/love-chat]", safeErrorMessage(err));
     return NextResponse.json({ text: "..." }, { status: 500 });
   }
 }

@@ -6,7 +6,7 @@ import { callLLM } from "@/lib/llm";
 import { TEMPERATURES } from "@/lib/providers";
 import { parseName, isWolfRole } from "@/lib/game-engine";
 import { debugLog } from "@/lib/debug";
-import { applyRateLimit, extractByokKey, extractProvider, validatePlayerName, safeErrorMessage, logRouteInfo } from "@/lib/rate-limit";
+import { applyRateLimit, extractByokKey, extractProvider, validatePlayerName, safeErrorMessage, logRouteInfo, isAuthError } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const limited = applyRateLimit(req);
@@ -65,10 +65,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json<VoteResponse>({ target, reason });
   } catch (err: unknown) {
-    if (byokKey && err instanceof Error && (err.message?.includes("401") || err.message?.includes("auth") || err.message?.includes("API key"))) {
+    console.error("[/api/vote] ERROR:", safeErrorMessage(err), "| status:", (err as { status?: number })?.status);
+    if (byokKey && isAuthError(err)) {
       return NextResponse.json({ target: "", reason: "", byokError: "Clé API invalide." }, { status: 401 });
     }
-    console.error("[/api/vote]", safeErrorMessage(err));
     return NextResponse.json({ target: "", reason: "" }, { status: 500 });
   }
 }

@@ -12,6 +12,7 @@ interface ChatFeedProps {
   vReveals: VoteReveal[];
   phase: Phase;
   winner: "village" | "loups" | "couple" | null;
+  onPlayerNameClick?: (player: Player) => void;
 }
 
 export default function ChatFeed({
@@ -23,6 +24,7 @@ export default function ChatFeed({
   vReveals,
   phase,
   winner,
+  onPlayerNameClick,
 }: ChatFeedProps) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -37,7 +39,7 @@ export default function ChatFeed({
       style={{ maxHeight: "calc(100vh - 260px)" }}
     >
       {messages.map((m, i) => (
-        <ChatMsg key={i} m={m} />
+        <ChatMsg key={i} m={m} players={players} onPlayerNameClick={onPlayerNameClick} />
       ))}
 
       {nText && (
@@ -75,7 +77,7 @@ export default function ChatFeed({
   );
 }
 
-function ChatMsg({ m }: { m: Message }) {
+function ChatMsg({ m, players, onPlayerNameClick }: { m: Message; players: Player[]; onPlayerNameClick?: (player: Player) => void }) {
   if (m.isSystem) {
     const bg = m.isNight
       ? "bg-indigo-950/50 border-indigo-800/20"
@@ -107,6 +109,8 @@ function ChatMsg({ m }: { m: Message }) {
   }
 
   const isHuman = m.isHuman;
+  const speakerPlayer = m.speaker ? players.find((p) => p.name === m.speaker) : null;
+
   return (
     <div
       className={`flex gap-2.5 my-1.5 ${isHuman ? "flex-row-reverse" : ""}`}
@@ -118,7 +122,11 @@ function ChatMsg({ m }: { m: Message }) {
         {m.emoji}
       </div>
       <div className={`max-w-sm sm:max-w-md ${isHuman ? "text-right" : ""}`}>
-        <span className="text-xs font-semibold" style={{ color: m.color }}>
+        <span
+          className={`text-xs font-semibold ${onPlayerNameClick && speakerPlayer ? "cursor-pointer hover:underline" : ""}`}
+          style={{ color: m.color }}
+          onClick={onPlayerNameClick && speakerPlayer ? () => onPlayerNameClick(speakerPlayer) : undefined}
+        >
           {m.speaker}
         </span>
         <div

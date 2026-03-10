@@ -13,6 +13,8 @@ import type {
   Potions,
   Lovers,
   GameConfig,
+  GameSummary,
+  DeathCause,
   DebateRequest,
   DebateResponse,
   VoteRequest,
@@ -59,6 +61,7 @@ import PhaseOverlay from "@/components/PhaseOverlay";
 import GameOverScreen from "@/components/GameOverScreen";
 import RoleRevealCeremony from "@/components/RoleRevealCeremony";
 import DeathReveal from "@/components/DeathReveal";
+import PlayerProfileDrawer from "@/components/PlayerProfileDrawer";
 import DebugPanel from "@/components/DebugPanel";
 
 function wait(ms: number) {
@@ -106,6 +109,7 @@ export default function GameBoard() {
   const [waitingForNext, setWaitingForNext] = useState(false);
   const [deathReveal, setDeathReveal] = useState<{ player: Player; cause: string; causeIcon: string } | null>(null);
   const deathRevealResolveRef = useRef<(() => void) | null>(null);
+  const [profilePlayer, setProfilePlayer] = useState<Player | null>(null);
 
   const [byokKey, setByokKey] = useState<string | null>(null);
   const [byokError, setByokError] = useState<string | null>(null);
@@ -723,12 +727,26 @@ export default function GameBoard() {
     const nr: NightResult = { wolfTarget, saved, deaths, corbeauTarget: nd.corbeauTarget, petiteFilleResult, salvateurTarget: salvTarget, alphaConverted, loversFormed: nd.loversFormed };
     setNResult(nr);
 
-    // Apply deaths
+    // Apply deaths with cause tracking
     const nightHunter = deaths.find((d) => d.role === "Chasseur") ?? null;
+    // Build a cause map for night deaths
+    const nightCauseMap = new Map<string, DeathCause>();
+    if (wolfTarget && !saved) nightCauseMap.set(wolfTarget, "wolves");
+    if (witchAction?.toUpperCase().startsWith("EMPOISONNER")) {
+      const poisonName = witchAction.split(/\s+/)[1];
+      if (poisonName) {
+        const pt = findPlayer(ps, poisonName);
+        if (pt) nightCauseMap.set(pt.name, "witch");
+      }
+    }
+    if (petiteFilleResult?.caught) {
+      const pf = ps.find((p) => p.role === "Petite Fille" && p.alive);
+      if (pf) nightCauseMap.set(pf.name, "petiteFille");
+    }
     let up = deaths.reduce(
       (acc, d) =>
         acc.map((p) =>
-          p.name === d.name ? { ...p, alive: false, revealedRole: true } : p
+          p.name === d.name ? { ...p, alive: false, revealedRole: true, causeOfDeath: nightCauseMap.get(d.name) || ("wolves" as DeathCause) } : p
         ),
       [...ps]
     );
@@ -743,7 +761,7 @@ export default function GameBoard() {
           const partner = findPlayer(up, partnerName);
           if (partner && partner.alive) {
             up = up.map((p) =>
-              p.name === partnerName ? { ...p, alive: false, revealedRole: true } : p
+              p.name === partnerName ? { ...p, alive: false, revealedRole: true, causeOfDeath: "love" as DeathCause } : p
             );
             loverDeaths.push(partnerName);
             debugLog(`[LOVERS] ${partnerName} meurt de chagrin (partenaire: ${d.name})`);
@@ -833,10 +851,12 @@ export default function GameBoard() {
       const shot = findPlayer(up, shotTarget);
       if (shot && shot.alive) {
         up = up.map((p) =>
-          p.name === shot.name ? { ...p, alive: false, revealedRole: true } : p
+          p.name === shot.name ? { ...p, alive: false, revealedRole: true, causeOfDeath: "hunter" as DeathCause } : p
         );
         setPlayers(up);
         if (isHumanDead(up)) setHAlive(false);
+        // FIX 7: Show death reveal for hunter's target
+        await showDeathReveal(shot, `Tué${isFeminine(shot.name, up) ? "e" : ""} par le Chasseur`, "🎯");
         addMsg(
           `Chasseur emporte ${shot.name} (${shot.role}) ! ${
             isWolfRole(shot.role) ? "🎉 Loup!" : "💀 Innocent..."
@@ -854,10 +874,12 @@ export default function GameBoard() {
     const shot = findPlayer(up, targetName);
     if (shot && shot.alive) {
       const updated = up.map((p) =>
-        p.name === shot.name ? { ...p, alive: false, revealedRole: true } : p
+        p.name === shot.name ? { ...p, alive: false, revealedRole: true, causeOfDeath: "hunter" as DeathCause } : p
       );
       setPlayers(updated);
       if (isHumanDead(updated)) setHAlive(false);
+      // FIX 7: Show death reveal for hunter's target
+      await showDeathReveal(shot, `Tué${isFeminine(shot.name, updated) ? "e" : ""} par le Chasseur`, "🎯");
       addMsg(
         `Chasseur emporte ${shot.name} (${shot.role}) ! ${
           isWolfRole(shot.role) ? "🎉 Loup!" : "💀 Innocent..."
@@ -1221,7 +1243,7 @@ export default function GameBoard() {
     }
 
     let up = currentPlayers.map((p) =>
-      p.name === ep?.name ? { ...p, alive: false, revealedRole: true } : p
+      p.name === ep?.name ? { ...p, alive: false, revealedRole: true, causeOfDeath: "vote" as DeathCause } : p
     );
     setPlayers(up);
     if (isHumanDead(up)) setHAlive(false);
@@ -1254,7 +1276,7 @@ export default function GameBoard() {
         const partner = findPlayer(up, partnerName);
         if (partner && partner.alive) {
           up = up.map((p) =>
-            p.name === partnerName ? { ...p, alive: false, revealedRole: true } : p
+            p.name === partnerName ? { ...p, alive: false, revealedRole: true, causeOfDeath: "love" as DeathCause } : p
           );
           setPlayers(up);
           if (isHumanDead(up)) setHAlive(false);
@@ -1283,11 +1305,13 @@ export default function GameBoard() {
       const shot = findPlayer(up, shotTarget);
       if (shot && shot.alive) {
         up = up.map((p) =>
-          p.name === shot.name ? { ...p, alive: false, revealedRole: true } : p
+          p.name === shot.name ? { ...p, alive: false, revealedRole: true, causeOfDeath: "hunter" as DeathCause } : p
         );
         setPlayers(up);
         if (isHumanDead(up)) setHAlive(false);
         hunterDeath = shot.name;
+        // FIX 7: Show death reveal for hunter's target
+        await showDeathReveal(shot, `Tué${isFeminine(shot.name, up) ? "e" : ""} par le Chasseur`, "🎯");
         addMsg(
           `Chasseur emporte ${shot.name} (${shot.role}) ! ${
             isWolfRole(shot.role) ? "🎉" : "💀"
@@ -1390,6 +1414,29 @@ export default function GameBoard() {
 
     // Log game cost
     try { await fetch("/api/game-stats"); } catch { /* ignore */ }
+
+    // Build GameSummary for future Supabase persistence
+    const humanPlayer = ps.find((p) => p.isHuman);
+    if (humanPlayer) {
+      const summary: GameSummary = {
+        playerCount: ps.length,
+        humanRole: humanPlayer.role,
+        result: result === "village" || result === "couple" ? "village_win" : "wolves_win",
+        humanSurvived: humanPlayer.alive,
+        cycles: cy,
+        provider: "unknown",
+        characters: ps.filter((p) => !p.isHuman).map((p) => ({
+          name: p.name,
+          personality: p.archetype || p.name,
+          role: p.role,
+          survived: p.alive,
+          accusedHuman: messages.some((m) => m.speaker === p.name && !m.isSystem && m.text.toLowerCase().includes(humanPlayer.name.toLowerCase())),
+          defendedHuman: messages.some((m) => m.speaker === p.name && !m.isSystem && m.text.toLowerCase().includes(humanPlayer.name.toLowerCase()) && /innocent|défend|confiance|pas lui|pas elle/i.test(m.text)),
+          votedAgainstHuman: false, // TODO: track from vote reveals
+        })),
+      };
+      debugLog("GameSummary:", summary);
+    }
   }
 
   // ── HUMAN ACTIONS ─────────────────────────────────────────────────────────
@@ -1593,6 +1640,7 @@ export default function GameBoard() {
           onDone={handleDeathRevealDone}
         />
       )}
+      <PlayerProfileDrawer player={profilePlayer} onClose={() => setProfilePlayer(null)} />
       {phase === "gameOver" && winner && (
         <GameOverScreen
           winner={winner}
@@ -1607,7 +1655,7 @@ export default function GameBoard() {
         <ConfigScreen onStart={startGame} onShowTuto={() => setShowTuto(true)} />
       ) : (
         <>
-          <PlayerBar players={players} speaker={speaker} loading={loading} />
+          <PlayerBar players={players} speaker={speaker} loading={loading} onPlayerClick={setProfilePlayer} />
 
           {phase !== "intro" && (
             <div className="flex items-center justify-center gap-3 py-1.5 bg-white/3 border-b border-white/5 text-xs flex-wrap px-2">
@@ -1699,6 +1747,7 @@ export default function GameBoard() {
                   messages={messages} nText={nText} loading={loading}
                   speaker={speaker} players={players} vReveals={vReveals}
                   phase={phase} winner={winner}
+                  onPlayerNameClick={setProfilePlayer}
                 />
                 <InputArea
                   phase={phase} round={round} cycle={cycle} input={input} setInput={setInput}

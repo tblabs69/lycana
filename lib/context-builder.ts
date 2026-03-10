@@ -96,6 +96,126 @@ export function buildAccusationsContext(
   return ctx;
 }
 
+// ── FIX 4: DEDUCTIONS FROM REVEALED ROLES ────────────────────────────────
+
+/** Build deduction block based on revealed roles of dead players */
+export function buildRoleDeductions(
+  players: Player[],
+  messages: Message[],
+  history: HistoryEntry[]
+): string {
+  const revealedDead = players.filter((p) => !p.alive && p.revealedRole);
+  if (revealedDead.length === 0) return "";
+
+  const alive = new Set(players.filter((p) => p.alive).map((p) => p.name));
+  let ctx = "\nRÔLES RÉVÉLÉS ET DÉDUCTIONS LOGIQUES :\n";
+
+  for (const dead of revealedDead) {
+    // Find death cause
+    const deathEntry = history.find((h) => h.nightDeath === dead.name || h.voteDeath === dead.name || h.hunterDeath === dead.name || (h.nightDeaths && h.nightDeaths.includes(dead.name)));
+    let deathCause = "mort";
+    if (deathEntry) {
+      if (deathEntry.voteDeath === dead.name) deathCause = `voté jour ${deathEntry.cycle}`;
+      else if (deathEntry.nightDeath === dead.name || (deathEntry.nightDeaths && deathEntry.nightDeaths.includes(dead.name))) deathCause = `tué nuit ${deathEntry.cycle}`;
+      else if (deathEntry.hunterDeath === dead.name) deathCause = `tué par le Chasseur`;
+    }
+
+    ctx += `\n${dead.name} est mort (${deathCause}) — rôle révélé : ${dead.role}\n`;
+
+    // Find what this dead player said in debates (accusations)
+    const deadAccusations = findAccusationsBy(dead.name, messages, players);
+    // Find who accused this dead player
+    const accusedBy = findAccusationsAgainst(dead.name, messages, players);
+    // Find who defended this dead player
+    const defendedBy = findDefendersOf(dead.name, messages, players);
+
+    if (dead.role === "Voyante") {
+      ctx += `  → C'ÉTAIT LA VOYANTE. Elle avait le pouvoir de voir le vrai rôle d'un joueur chaque nuit.\n`;
+      if (deadAccusations.length > 0) {
+        const aliveAccused = deadAccusations.filter((n) => alive.has(n));
+        if (aliveAccused.length > 0) {
+          ctx += `  → DÉDUCTION CRITIQUE : ${dead.name} a accusé ${aliveAccused.join(", ")} avant de mourir. Ces accusations ont un poids ÉNORME car elles étaient probablement basées sur une vision.\n`;
+          ctx += `  → Ces joueurs sont TRÈS PROBABLEMENT des loups. Le village devrait les cibler en priorité.\n`;
+        }
+      }
+    } else if (dead.role === "Villageois" || dead.role === "Chasseur" || dead.role === "Sorcière" || dead.role === "Salvateur" || dead.role === "Corbeau" || dead.role === "Ancien" || dead.role === "Cupidon" || dead.role === "Petite Fille" || dead.role === "Idiot du Village") {
+      if (deathEntry && deathEntry.voteDeath === dead.name) {
+        ctx += `  → C'ÉTAIT UN INNOCENT (${dead.role}). Le village a fait une erreur en le votant.\n`;
+        const votersPushing = accusedBy.filter((n) => alive.has(n));
+        if (votersPushing.length > 0) {
+          ctx += `  → Qui avait poussé ce vote ? ${votersPushing.join(", ")}. Ils sont potentiellement suspects (les loups manipulent les votes).\n`;
+        }
+      }
+    } else if (isWolfRole(dead.role)) {
+      ctx += `  → C'ÉTAIT UN LOUP.\n`;
+      if (deathEntry && deathEntry.voteDeath === dead.name) {
+        ctx += `  → Le village a bien voté.\n`;
+        const defenders = defendedBy.filter((n) => alive.has(n));
+        if (defenders.length > 0) {
+          ctx += `  → Qui l'avait défendu ? ${defenders.join(", ")}. Ils sont potentiellement suspects (un loup défend souvent ses co-loups).\n`;
+        }
+      }
+    }
+  }
+
+  return ctx + "\n";
+}
+
+/** Find players that a given speaker accused in messages */
+function findAccusationsBy(speakerName: string, messages: Message[], players: Player[]): string[] {
+  const accused: Set<string> = new Set();
+  const allNames = players.map((p) => p.name);
+  const speakerMsgs = messages.filter((m) => m.speaker === speakerName && !m.isSystem);
+
+  for (const msg of speakerMsgs) {
+    const text = msg.text.toLowerCase();
+    const hasAccusation = STRONG_ACCUSATION_WORDS.some((w) => text.includes(w)) ||
+      /suspect|accuse|c'est lui|c'est elle|vote|loup/i.test(msg.text);
+    if (!hasAccusation) continue;
+
+    for (const name of allNames) {
+      if (name === speakerName) continue;
+      if (text.includes(name.toLowerCase())) {
+        accused.add(name);
+      }
+    }
+  }
+  return [...accused];
+}
+
+/** Find players who accused a given target in messages */
+function findAccusationsAgainst(targetName: string, messages: Message[], players: Player[]): string[] {
+  const accusers: Set<string> = new Set();
+  const relevantMsgs = messages.filter((m) => !m.isSystem && m.speaker && m.speaker !== targetName);
+
+  for (const msg of relevantMsgs) {
+    const text = msg.text.toLowerCase();
+    if (!text.includes(targetName.toLowerCase())) continue;
+    const hasAccusation = STRONG_ACCUSATION_WORDS.some((w) => text.includes(w)) ||
+      /suspect|accuse|vote/i.test(msg.text);
+    if (hasAccusation && msg.speaker) {
+      accusers.add(msg.speaker);
+    }
+  }
+  return [...accusers];
+}
+
+/** Find players who defended a given target in messages */
+function findDefendersOf(targetName: string, messages: Message[], players: Player[]): string[] {
+  const defenders: Set<string> = new Set();
+  const defenseWords = ["innocent", "défend", "confiance", "pas lui", "pas elle", "laissez", "tort", "erreur", "pas coupable"];
+  const relevantMsgs = messages.filter((m) => !m.isSystem && m.speaker && m.speaker !== targetName);
+
+  for (const msg of relevantMsgs) {
+    const text = msg.text.toLowerCase();
+    if (!text.includes(targetName.toLowerCase())) continue;
+    if (defenseWords.some((w) => text.includes(w)) && msg.speaker) {
+      defenders.add(msg.speaker);
+    }
+  }
+  return [...defenders];
+}
+
 // ── MÉMOIRE RELATIONNELLE ────────────────────────────────────────────────
 
 /** Build a 1-line relationship summary between a player and each alive opponent */
@@ -335,6 +455,26 @@ export function buildGameContext(
     ctx += `Morts: ${dead.map((d) => `${d.name}(${d.role})`).join(", ")}\n`;
   }
 
+  // FIX 2: Anti-hallucination guard for cycle 1
+  if (cycle === 1) {
+    ctx += `\n⚠️ C'EST LE TOUT PREMIER JOUR DE LA PARTIE.
+Il n'y a eu AUCUN tour de jeu avant celui-ci. Personne n'est mort par vote. Personne n'a parlé avant ce tour.
+Tu n'as AUCUN souvenir de tours précédents car il n'y en a pas eu.
+INTERDICTIONS :
+- Ne fais référence à AUCUN événement passé.
+- Ne mentionne AUCUN joueur mort par vote (il n'y en a pas).
+- N'invente AUCUN historique, AUCUNE accusation passée, AUCUN "avant de mourir".
+- Ne dis PAS "hier", "au tour précédent", "avant sa mort", "il avait dit que...".
+Base-toi UNIQUEMENT sur ce qui est dit dans ce tour de débat, en ce moment.\n\n`;
+  }
+
+  // FIX 8: Anti-hallucination for citations (all cycles)
+  ctx += `⚠️ RÈGLE ABSOLUE SUR LES CITATIONS :
+Ne fais JAMAIS référence à des propos qu'un joueur aurait tenus si ces propos n'apparaissent pas EXPLICITEMENT dans l'historique des messages ci-dessous.
+Ne dis PAS "{nom} avait dit que..." ou "{nom} avait des doutes sur..." SAUF si tu peux retrouver cette phrase exacte dans les messages ci-dessous.
+Si tu n'es pas SÛR qu'un joueur a dit quelque chose, ne le mentionne pas.
+Inventer une citation est la PIRE chose que tu puisses faire.\n\n`;
+
   // A1: Dynamic "RÔLES RÉVÉLÉS" section — built from game state
   const revealedDead = players.filter((p) => !p.alive && p.revealedRole);
   if (revealedDead.length) {
@@ -386,6 +526,9 @@ export function buildGameContext(
       ctx += `- Le Corbeau (${c.name}) est MORT. Plus de votes bonus.\n`;
     }
     ctx += "\n";
+
+    // FIX 4: Role-based deductions
+    ctx += buildRoleDeductions(players, messages, history);
   }
 
   // Journal-based memory for AI players, factual memory for human
@@ -468,10 +611,19 @@ export function buildGameContext(
       nightResult?.wolfTarget ? " Ciblé " + nightResult.wolfTarget + "." : ""
     }\n`;
 
-    // Wolf constraint: never accuse co-wolves in debate
+    // FIX 1: Wolf protection in debate — detailed constraint
     if (alivePartners.length > 0) {
       const names = alivePartners.map((p) => p.name).join(", ");
-      ctx += `\n⚠️ CONTRAINTE LOUP ABSOLUE : tu ne dois JAMAIS accuser, soupçonner, ou cibler ${names} dans le débat. ${alivePartners.length > 1 ? "Ce sont tes" : "C'est ton"} coéquipier${alivePartners.length > 1 ? "s" : ""} loup${alivePartners.length > 1 ? "s" : ""}. Tu peux ${alivePartners.length > 1 ? "les" : "le"} ignorer ou ${alivePartners.length > 1 ? "les" : "le"} défendre subtilement, mais JAMAIS ${alivePartners.length > 1 ? "les" : "le"} mettre en danger.\n`;
+      ctx += `\n⚠️ CONTRAINTE ABSOLUE — TU ES LOUP-GAROU.
+Tes co-loups sont : ${names}.
+INTERDICTIONS :
+- Ne JAMAIS accuser, suspecter, ou mettre en difficulté un co-loup.
+- Ne JAMAIS voter contre un co-loup.
+- Ne JAMAIS appuyer une accusation portée contre un co-loup.
+SI un co-loup est accusé par le village :
+- Défends-le subtilement (sans être trop insistant pour ne pas te griller).
+- Détourne l'attention vers un autre joueur.
+- Tu peux dire "je ne suis pas convaincu" ou "on devrait regarder ailleurs".\n`;
     }
 
     // E3: Detect if someone is claiming Voyante and accusing a wolf
@@ -540,11 +692,6 @@ export function buildGameContext(
         : `- ${m.speaker}: "${m.text}"\n`;
     });
     ctx += "\n";
-  }
-
-  // Garde-fou cycle 1 RENFORCÉ
-  if (cycle === 1 && !history.length) {
-    ctx += "**C'EST LE TOUT PREMIER DÉBAT DE LA PARTIE. Il n'y a eu AUCUNE discussion avant cette nuit. Personne n'a jamais parlé. Personne n'a jamais accusé personne. Tu ne peux PAS faire référence à des conversations ou accusations passées car il n'y en a eu AUCUNE. La seule info disponible est : qui est mort cette nuit et quel était son rôle.**\n\n";
   }
 
   // Instructions de tour
@@ -717,6 +864,132 @@ export function buildDayDebateSummary(
   return lines.join("\n");
 }
 
+// ── FIX 3: STRATEGIC NIGHT SUMMARY FOR WOLVES ──────────────────────────
+
+/** Build a strategic summary of the day's events for wolf night decisions */
+export function buildWolfStrategicNightSummary(
+  messages: Message[],
+  players: Player[],
+  cycle: number
+): string {
+  const dayMessages = messages.filter(
+    (m) => m.cycle === cycle && !m.isSystem && m.speaker
+  );
+  if (dayMessages.length === 0) return "";
+
+  const alive = players.filter((p) => p.alive);
+  const wolfNames = new Set(alive.filter((p) => isWolfRole(p.role)).map((p) => p.name));
+  const nonWolfAlive = alive.filter((p) => !isWolfRole(p.role));
+
+  // Detect accusations against wolves
+  const threatsToWolves: string[] = [];
+  const wolfDefenders: string[] = [];
+  const silentPlayers: string[] = [];
+
+  for (const player of nonWolfAlive) {
+    const myMsgs = dayMessages.filter((m) => m.speaker === player.name);
+    if (myMsgs.length === 0 || myMsgs.every((m) => /^(hmm|mouais|je passe|rien|j'observe)[.!?]*$/i.test(m.text.trim()))) {
+      silentPlayers.push(player.name);
+      continue;
+    }
+
+    const allText = myMsgs.map((m) => m.text.toLowerCase()).join(" ");
+
+    // Check if they accused a wolf
+    for (const wolfName of wolfNames) {
+      if (allText.includes(wolfName.toLowerCase())) {
+        const hasAccusation = STRONG_ACCUSATION_WORDS.some((w) => allText.includes(w)) ||
+          /suspect|accuse|vote|loup|bizarre|louche/i.test(allText);
+        const hasDefense = /innocent|défend|confiance|pas lui|pas elle|laissez|tort|d'accord avec/i.test(allText);
+
+        if (hasAccusation && !hasDefense) {
+          threatsToWolves.push(`- ${player.name} a accusé ${wolfName} aujourd'hui. DANGER : il pourrait avoir des infos (Voyante ?) ou de bons instincts.`);
+        } else if (hasDefense) {
+          wolfDefenders.push(`- ${player.name} a défendu ${wolfName}. UTILE : ne pas le tuer, il pourrait encore servir de bouclier.`);
+        }
+      }
+    }
+  }
+
+  let ctx = "\nRÉSUMÉ STRATÉGIQUE DE LA JOURNÉE POUR LES LOUPS :\n\n";
+
+  if (threatsToWolves.length > 0) {
+    ctx += "MENACES POUR LA MEUTE :\n";
+    ctx += threatsToWolves.join("\n") + "\n\n";
+  }
+
+  if (wolfDefenders.length > 0) {
+    ctx += "JOUEURS QUI ONT DÉFENDU UN LOUP :\n";
+    ctx += wolfDefenders.join("\n") + "\n\n";
+  }
+
+  if (silentPlayers.length > 0) {
+    ctx += `JOUEURS DISCRETS (n'ont pas parlé ou ont peu parlé) :\n- ${silentPlayers.join(", ")}\n\n`;
+  }
+
+  ctx += `RÉFLEXION STRATÉGIQUE pour choisir la cible :
+- Tuer quelqu'un qui t'a accusé élimine une menace MAIS rend le lien évident ("il accusait un loup et il est mort la nuit").
+- Tuer un joueur discret est plus sûr mais élimine quelqu'un qui ne te menace pas.
+- Tuer un joueur qui accusait un VILLAGEOIS innocent peut semer la confusion.
+- NE PAS tuer quelqu'un qui défend un loup (il t'est utile).
+Choisis ta cible en pesant ces facteurs.\n\n`;
+
+  return ctx;
+}
+
+// ── FIX 5: ROLE-BASED RISKS FOR WOLF NIGHT ──────────────────────────────
+
+/** Build risk assessment based on revealed roles for wolf night decisions */
+export function buildWolfRoleRisks(
+  players: Player[],
+  messages: Message[],
+  history: HistoryEntry[]
+): string {
+  const revealedDead = players.filter((p) => !p.alive && p.revealedRole);
+  if (revealedDead.length === 0) return "";
+
+  const alive = new Set(players.filter((p) => p.alive).map((p) => p.name));
+  const wolfNames = new Set(players.filter((p) => p.alive && isWolfRole(p.role)).map((p) => p.name));
+  let ctx = "";
+  let hasRisks = false;
+
+  for (const dead of revealedDead) {
+    if (dead.role === "Voyante") {
+      // Check if the voyante accused a living wolf before dying
+      const voyAccusations = findAccusationsBy(dead.name, messages, players);
+      const accusedWolves = voyAccusations.filter((n) => wolfNames.has(n));
+      if (accusedWolves.length > 0) {
+        if (!hasRisks) {
+          ctx += "RISQUES SUITE AUX RÔLES RÉVÉLÉS :\n";
+          hasRisks = true;
+        }
+        for (const wolfName of accusedWolves) {
+          ctx += `⚠️ DANGER CRITIQUE : ${dead.name} était Voyante et avait accusé ${wolfName} avant de mourir. Le village risque de faire le lien demain. Options :\n`;
+          ctx += `- Tuer les joueurs les plus intelligents qui pourraient faire cette déduction\n`;
+          ctx += `- Préparer une défense crédible pour ${wolfName} ("corrélation n'est pas causalité", "elle accusait aussi d'autres joueurs", etc.)\n\n`;
+        }
+      }
+    }
+
+    // If an innocent was voted out, those who pushed the vote might be suspected as wolves
+    if (!isWolfRole(dead.role) && history.some((h) => h.voteDeath === dead.name)) {
+      const pushers = findAccusationsAgainst(dead.name, messages, players);
+      const wolfPushers = pushers.filter((n) => wolfNames.has(n));
+      if (wolfPushers.length > 0) {
+        if (!hasRisks) {
+          ctx += "RISQUES SUITE AUX RÔLES RÉVÉLÉS :\n";
+          hasRisks = true;
+        }
+        for (const wp of wolfPushers) {
+          ctx += `⚠️ ATTENTION : ${wp} avait poussé le vote contre ${dead.name} (innocent). Le village pourrait suspecter ${wp} d'avoir manipulé le vote.\n`;
+        }
+      }
+    }
+  }
+
+  return ctx;
+}
+
 /** Construit le contexte pour l'action des loups la nuit */
 export function buildWolfNightContext(
   players: Player[],
@@ -763,6 +1036,10 @@ export function buildWolfNightContext(
       debugLog(`[WOLF CHAT] Résumé du débat injecté : "${summary.substring(0, 200)}${summary.length > 200 ? "..." : ""}"`);
       ctx += `RÉSUMÉ DU DÉBAT D'AUJOURD'HUI :\n${summary}\n\n`;
     }
+    // FIX 3: Strategic night summary
+    ctx += buildWolfStrategicNightSummary(messages, players, cycle);
+    // FIX 5: Role-based risks for wolf night strategy
+    ctx += buildWolfRoleRisks(players, messages, history ?? []);
   }
 
   // Kill history (A4)

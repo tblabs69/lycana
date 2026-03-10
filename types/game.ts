@@ -41,6 +41,8 @@ export interface PlayerIdentity {
   archetype?: string;
 }
 
+export type DeathCause = "vote" | "wolves" | "hunter" | "witch" | "love" | "petiteFille" | null;
+
 export interface Player extends PlayerIdentity {
   role: Role;
   wolfStyle?: WolfStyle;
@@ -54,6 +56,10 @@ export interface Player extends PlayerIdentity {
   alphaUsed?: boolean;
   /** AI internal journal — persistent memory across phases */
   internalJournal?: JournalEntry[];
+  /** Cause of death — set when player dies */
+  causeOfDeath?: DeathCause;
+  /** Future: persistent character ID across games */
+  characterId?: string;
 }
 
 export interface Message {
@@ -276,4 +282,24 @@ export interface JournalUpdateRequest {
 
 export interface JournalUpdateResponse {
   entry: JournalEntry;
+}
+
+// ── GAME SUMMARY (for future Supabase persistence) ──────────────────────
+
+export interface GameSummary {
+  playerCount: number;
+  humanRole: string;
+  result: "village_win" | "wolves_win";
+  humanSurvived: boolean;
+  cycles: number;
+  provider: string;
+  characters: {
+    name: string;
+    personality: string;
+    role: string;
+    survived: boolean;
+    accusedHuman: boolean;
+    defendedHuman: boolean;
+    votedAgainstHuman: boolean;
+  }[];
 }

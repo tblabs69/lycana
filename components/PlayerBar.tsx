@@ -6,9 +6,10 @@ interface PlayerBarProps {
   players: Player[];
   speaker: string | null;
   loading: boolean;
+  onPlayerClick?: (player: Player) => void;
 }
 
-export default function PlayerBar({ players, speaker, loading }: PlayerBarProps) {
+export default function PlayerBar({ players, speaker, loading, onPlayerClick }: PlayerBarProps) {
   return (
     <div className="flex gap-1.5 sm:gap-3 py-2.5 px-3 border-b border-white/5 overflow-x-auto scrollbar-hide sm:justify-center sm:flex-wrap">
       {players.map((p) => (
@@ -17,6 +18,7 @@ export default function PlayerBar({ players, speaker, loading }: PlayerBarProps)
           player={p}
           active={speaker === p.name}
           speaking={speaker === p.name && loading}
+          onClick={onPlayerClick ? () => onPlayerClick(p) : undefined}
         />
       ))}
     </div>
@@ -27,16 +29,19 @@ function PlayerBadge({
   player: p,
   active,
   speaking,
+  onClick,
 }: {
   player: Player;
   active: boolean;
   speaking: boolean;
+  onClick?: () => void;
 }) {
   const dead = !p.alive;
   return (
     <div
-      className={`flex flex-col items-center transition-all duration-500 ${active ? "scale-110" : ""} ${dead ? "opacity-30" : ""}`}
+      className={`flex flex-col items-center transition-all duration-500 ${active ? "scale-110" : ""} ${dead ? "opacity-30" : ""} ${onClick ? "cursor-pointer hover:scale-105 active:scale-95" : ""}`}
       style={{ minWidth: 48 }}
+      onClick={onClick}
     >
       <div
         className={`w-11 h-11 rounded-full flex items-center justify-center text-xl border-2 transition-all ${

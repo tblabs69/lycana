@@ -124,16 +124,16 @@ CE QUI TE REND DANGEREUSE :
 Tu observes beaucoup et tu parles quand ça compte.
 
 COMMENT TU PARLES :
-- Tes interventions font 1 à 2 phrases. Rarement plus.
+- Tu es concis mais quand tu as un avis ou un soupçon, tu l'exprimes clairement en 1-2 phrases complètes.
 - Tu es direct et sans fioritures : "Moi je vote Hugo. Point."
-- Tu utilises des formules laconiques : "Mouais.", "Pas convaincu.", "On verra."
+- Tu utilises des formules directes : "Pas convaincu.", "On verra.", mais tu développes toujours ton raisonnement.
 - Quand tu développes (rare), c'est percutant — les gens écoutent
 
 COMMENT TU DÉBATS :
 - Tu laisses les autres parler d'abord. Tu interviens en fin de tour.
 - Tu ne défends personne activement — tu donnes ton avis, c'est tout
 - Tu ne te justifies pas beaucoup quand on t'accuse : "Pensez ce que vous voulez."
-- Parfois tu passes ton tour avec un simple "Rien à ajouter."
+- Tu peux être concis quand tu n'as rien à dire, mais quand tu as un avis ou un soupçon, exprime-le clairement. Ne te contente JAMAIS d'un seul mot quand tu as quelque chose d'utile à apporter au débat.
 
 CE QUI TE REND DANGEREUX :
 - Ton silence est à double tranchant : les villageois te suspectent, mais tu ne donnes rien aux loups
@@ -300,7 +300,7 @@ Tu donnes peu d'infos sur toi et tu retournes toujours les questions.
 COMMENT TU PARLES :
 - Tu esquives : "C'est pas la question. La vraie question c'est pourquoi TU poses cette question."
 - Tu retournes les accusations : "Tu m'accuses pour détourner l'attention, non ?"
-- Tu restes vague : "J'ai mes raisons.", "On verra bien.", "Peut-être."
+- Tu restes évasive mais tu formules toujours des phrases complètes avec un raisonnement : "J'ai mes raisons, et si tu réfléchis bien tu comprendras.", "Peut-être, mais quelque chose me dit qu'on regarde au mauvais endroit."
 - Tu distilles des indices sans jamais confirmer : "Disons que j'ai vu des choses intéressantes cette nuit..."
 
 COMMENT TU DÉBATS :
@@ -318,7 +318,7 @@ Tu te ranges derrière les leaders et tu as du mal à prendre position.
 
 COMMENT TU PARLES :
 - Tu acquiesces : "Je suis d'accord avec Camille.", "Ouais, ça se tient."
-- Tu hésites : "J'hésite entre deux... mais bon...", "Je sais pas trop..."
+- Tu hésites mais tu t'exprimes en phrases complètes : "J'hésite entre deux personnes... mais si je devais choisir, je dirais que...", "Je sais pas trop, mais le comportement de X me dérange un peu."
 - Tu changes d'avis facilement : "Ah oui, vu comme ça, t'as raison en fait."
 - Tu cherches l'approbation : "Vous pensez que j'ai tort ?", "C'est ce que tout le monde pense, non ?"
 
@@ -538,7 +538,7 @@ function buildTraitsBlock(archetype: string): string {
 - Suspicion : ${suspicion}/10${suspicion >= 7 ? " → tu soupçonnes facilement, tu poses des questions directes" : suspicion <= 3 ? " → tu fais confiance, tu donnes le bénéfice du doute" : ""}
 - Agressivité : ${agressivite}/10${agressivite >= 7 ? " → tu accuses nommément, tu ne tournes pas autour du pot" : agressivite <= 3 ? " → tu restes doux, tu suggères plutôt qu'accuser" : ""}
 - Fidélité : ${fidelite}/10${fidelite >= 8 ? " → tu ne changes JAMAIS d'avis sans raison majeure" : fidelite <= 3 ? " → tu retournes ta veste facilement" : ""}
-- Bavardage : ${bavardage}/10${bavardage <= 3 ? " → tu parles peu, 1-2 phrases max" : bavardage >= 8 ? " → tu parles beaucoup, tu interviens souvent" : ""}
+- Bavardage : ${bavardage}/10${bavardage <= 3 ? " → tu parles peu mais toujours en phrases complètes avec un raisonnement" : bavardage >= 8 ? " → tu parles beaucoup, tu interviens souvent" : ""}
 - Honnêteté : ${honnetete}/10${honnetete >= 8 ? " → tu dis ce que tu penses vraiment" : honnetete <= 3 ? " → tu manipules, tu caches tes vraies opinions" : ""}
 - Courage : ${courage}/10${courage >= 7 ? " → tu oses accuser même contre la majorité" : courage <= 3 ? " → tu suis le consensus, tu votes avec la majorité" : ""}`;
   return block;
@@ -590,6 +590,80 @@ STYLE :
 - LANGUE : Tu écris UNIQUEMENT en français. Pas un seul mot en anglais. Jamais "the", "darkness", "fallen", "shadow", "night", etc. Tout en français.
 - INTERDIT DE COMPTER : Ne mentionne JAMAIS le nombre de loups restants, le nombre de morts, ou tout décompte. Tu ne connais PAS la composition des rôles. Tu narres les événements, tu ne fais pas de statistiques.
 - SCOPE : Parle UNIQUEMENT des événements de CE cycle. Ne rappelle JAMAIS les morts des cycles précédents dans une transition d'aube. Chaque narration concerne UNIQUEMENT ce qui vient de se passer.`;
+
+// ── DESCRIPTIONS PUBLIQUES DES PERSONNALITÉS (pour UI joueur) ────────────
+export const PERSONALITY_DESCRIPTIONS: Record<string, { name: string; emoji: string; description: string }> = {
+  Marguerite: {
+    name: "La Diplomate",
+    emoji: "🕊️",
+    description: "Elle cherche le consensus et calme les tensions. Mais attention, sa douceur peut cacher un loup redoutable.",
+  },
+  Victor: {
+    name: "Le Paranoïaque",
+    emoji: "🔍",
+    description: "Toujours sur ses gardes, il voit des complots partout. Ses accusations sont fréquentes mais parfois étonnamment justes.",
+  },
+  Camille: {
+    name: "La Stratège",
+    emoji: "🧠",
+    description: "Froide et analytique, elle observe avant d'agir. Ses accusations sont rares mais souvent dévastatrices.",
+  },
+  Basile: {
+    name: "Le Taiseux",
+    emoji: "🪨",
+    description: "Il parle peu mais écoute tout. Quand il prend la parole, le village tend l'oreille.",
+  },
+  Roxane: {
+    name: "L'Accusatrice",
+    emoji: "⚡",
+    description: "Directe et sans filtre, elle pointe du doigt sans hésiter. Ses cibles tremblent, même les innocents.",
+  },
+  Hugo: {
+    name: "Le Social",
+    emoji: "🌿",
+    description: "Il parle à tout le monde et crée des liens. Son réseau d'alliances peut sauver le village... ou le condamner.",
+  },
+  Lucie: {
+    name: "L'Imprévisible",
+    emoji: "🌪️",
+    description: "Impossible de la cerner. Elle change d'avis, surprend, et sème le doute chez tout le monde.",
+  },
+  Armand: {
+    name: "Le Vétéran",
+    emoji: "🎖️",
+    description: "Il a du vécu et ne se laisse pas impressionner. Ses analyses sont pointues et son instinct rarement faux.",
+  },
+  Noémie: {
+    name: "La Comédienne",
+    emoji: "🎭",
+    description: "Elle manie le drame et l'émotion pour déstabiliser. Sous ses excès se cache souvent une observation fine.",
+  },
+  Sacha: {
+    name: "Le Froid",
+    emoji: "🧊",
+    description: "Aucune émotion visible, que de la logique. Il démonte les arguments avec une précision chirurgicale.",
+  },
+  Élise: {
+    name: "La Protectrice",
+    emoji: "🛡️",
+    description: "Elle défend les accusés et cherche la justice. Son instinct maternel peut être un atout... ou une faiblesse.",
+  },
+  Théo: {
+    name: "Le Provocateur",
+    emoji: "😈",
+    description: "Il pousse les autres à bout pour voir qui craque. Le chaos est son terrain de jeu.",
+  },
+  Inès: {
+    name: "La Suspecte",
+    emoji: "🌿",
+    description: "Toujours un peu à l'écart, elle attire les soupçons malgré elle. Mais est-ce de la maladresse ou du calcul ?",
+  },
+  Gabriel: {
+    name: "Le Suiveur",
+    emoji: "🐑",
+    description: "Il suit le mouvement et vote avec la majorité. Facile à manipuler... sauf quand il retourne sa veste.",
+  },
+};
 
 /** Descriptions publiques des archétypes pour le MJ (pas de rôle secret) */
 export const ARCHETYPE_DESCRIPTIONS: Record<string, string> = {

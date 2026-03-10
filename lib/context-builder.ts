@@ -468,6 +468,13 @@ INTERDICTIONS :
 Base-toi UNIQUEMENT sur ce qui est dit dans ce tour de débat, en ce moment.\n\n`;
   }
 
+  // Anti-certainty guard — never claim to KNOW someone's role
+  ctx += `⚠️ RÈGLE ABSOLUE SUR LES RÔLES :
+Tu ne connais PAS le rôle des autres joueurs vivants (sauf si ton propre rôle te donne cette info — Voyante, co-loup).
+Tu ne dois JAMAIS dire "je SAIS que {nom} est loup/villageois" ou "on SAIT que {nom} est...".
+Tu peux SUSPECTER, ACCUSER, DOUTER — mais jamais affirmer avec certitude le rôle d'un joueur vivant.
+Seuls les rôles des joueurs MORTS sont connus de tous.\n\n`;
+
   // FIX 8: Anti-hallucination for citations (all cycles)
   ctx += `⚠️ RÈGLE ABSOLUE SUR LES CITATIONS :
 Ne fais JAMAIS référence à des propos qu'un joueur aurait tenus si ces propos n'apparaissent pas EXPLICITEMENT dans l'historique des messages ci-dessous.

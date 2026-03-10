@@ -86,7 +86,7 @@ export default function PlayerProfileDrawer({ player, onClose }: PlayerProfileDr
           background: "linear-gradient(170deg, #0f0a18 0%, #1a1025 50%, #0f0a18 100%)",
           border: "1px solid rgba(255,255,255,0.08)",
           maxHeight: "85vh",
-          animation: "slideUp 300ms cubic-bezier(0.32, 0.72, 0, 1)",
+          animation: "drawerSlideUp 300ms cubic-bezier(0.32, 0.72, 0, 1) forwards",
         }}
       >
         {/* Handle bar (mobile) */}
@@ -222,22 +222,6 @@ export default function PlayerProfileDrawer({ player, onClose }: PlayerProfileDr
         </div>
       </div>
 
-      <style jsx>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes slideUp {
-          from { transform: translateY(100%); opacity: 0.5; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-        @media (min-width: 640px) {
-          @keyframes slideUp {
-            from { transform: scale(0.95) translateY(10px); opacity: 0; }
-            to { transform: scale(1) translateY(0); opacity: 1; }
-          }
-        }
-      `}</style>
     </div>
   );
 }
